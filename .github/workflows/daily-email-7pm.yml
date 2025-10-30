@@ -1,0 +1,60 @@
+name: Iron Lady Daily Email Report (7 PM IST)
+
+on:
+  schedule:
+    # Runs at 1:30 PM UTC (7:00 PM IST)
+    # IST is UTC+5:30, so 19:00 IST = 13:30 UTC
+    - cron: '30 13 * * *'
+  
+  workflow_dispatch:  # Allows manual trigger for testing
+    inputs:
+      test_mode:
+        description: 'Run in test mode'
+        required: false
+        default: 'false'
+
+jobs:
+  send-daily-report:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout repository
+      uses: actions/checkout@v3
+    
+    - name: 🐍 Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: 📦 Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas numpy python-dotenv
+    
+    - name: 📧 Send Professional Daily Report
+      env:
+        GMAIL_USER: ${{ secrets.GMAIL_USER }}
+        GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        CEO_EMAIL: ${{ secrets.CEO_EMAIL }}
+      run: |
+        echo "=========================================="
+        echo "Iron Lady Daily Email Report"
+        echo "=========================================="
+        echo "📅 Date: $(date +'%B %d, %Y')"
+        echo "🕐 Time: $(date +'%I:%M %p')"
+        echo "=========================================="
+        python send_professional_email.py
+        echo "=========================================="
+    
+    - name: ✅ Report Status
+      if: success()
+      run: |
+        echo "✅ Daily email report sent successfully!"
+        echo "📊 Check recipient inbox for the report"
+    
+    - name: ❌ Report Failure
+      if: failure()
+      run: |
+        echo "❌ Failed to send daily email report"
+        echo "💡 Check the logs above for error details"
+        exit 1

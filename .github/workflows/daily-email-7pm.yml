@@ -31,19 +31,19 @@ jobs:
         python -m pip install --upgrade pip
         pip install pandas numpy python-dotenv
     
-    - name: 📧 Send Professional Daily Report
+    - name: 📧 Send Iron Lady Daily Report
       env:
         GMAIL_USER: ${{ secrets.GMAIL_USER }}
         GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         CEO_EMAIL: ${{ secrets.CEO_EMAIL }}
       run: |
         echo "=========================================="
-        echo "Iron Lady Daily Email Report"
+        echo "🏆 Iron Lady Daily Email Report"
         echo "=========================================="
         echo "📅 Date: $(date +'%B %d, %Y')"
         echo "🕐 Time: $(date +'%I:%M %p')"
         echo "=========================================="
-        python send_professional_email.py
+        python send_ironlady_branded_email.py
         echo "=========================================="
     
     - name: ✅ Report Status

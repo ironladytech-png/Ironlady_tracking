@@ -511,7 +511,7 @@ def send_daily_email(report_data=None, ocr_results=None):
     # Create message
     message = MIMEMultipart("alternative")
     message["Subject"] = f"Iron Lady Daily Report | {datetime.now().strftime('%B %d, %Y')} - Performance Summary"
-    message["From"] = f"Iron Lady Sales Tracker <{sender_email}>"
+    message["From"] = sender_email  # Fixed: Simple email format
     message["To"] = recipient_email
     message["Reply-To"] = sender_email
     
@@ -543,7 +543,7 @@ def send_daily_email(report_data=None, ocr_results=None):
         html_part = MIMEText(html_content, "html")
         message = MIMEMultipart("alternative")
         message["Subject"] = f"Iron Lady Daily Report | {datetime.now().strftime('%B %d, %Y')} - Performance Summary"
-        message["From"] = f"Iron Lady Sales Tracker <{sender_email}>"
+        message["From"] = sender_email  # Fixed: Simple email format
         message["To"] = recipient_email
         message.attach(html_part)
     

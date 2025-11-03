@@ -1,6 +1,6 @@
 """
-IRON LADY SALES TRACKER - COMPLETE VERSION WITH GOOGLE SHEETS
-Dashboard with Manual RM Data Entry, Google Sheets Integration & Official Branding
+IRON LADY SALES TRACKER - COMPLETE INTEGRATED VERSION
+Dashboard with Manual RM Data Entry, Google Sheets Viewer & Official Branding
 Team Leaders: Ghazala, Megha, Afreen (Trainee), Soumya (Trainee)
 """
 
@@ -59,7 +59,7 @@ IRONLADY_COLORS = {
 }
 
 # ============================================
-# TEAM LEADERS - UPDATED
+# TEAM LEADERS
 # ============================================
 
 DEFAULT_TEAM_LEADERS = ['Ghazala', 'Megha', 'Afreen', 'Soumya']
@@ -75,7 +75,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Official Iron Lady Custom CSS (COMPLETE FROM ORIGINAL)
+# Official Iron Lady Custom CSS (COMPLETE)
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap');
@@ -455,6 +455,9 @@ if 'selected_date' not in st.session_state:
 if 'use_google_sheets' not in st.session_state:
     st.session_state.use_google_sheets = False
 
+if 'loaded_sheet_data' not in st.session_state:
+    st.session_state.loaded_sheet_data = None
+
 # ============================================
 # GOOGLE SHEETS INTEGRATION
 # ============================================
@@ -483,9 +486,8 @@ def connect_to_google_sheets():
         st.error(f"❌ Google Sheets connection error: {e}")
         return None
 
-@st.cache_data(ttl=300)
 def fetch_sheet_data(sheet_id):
-    """Fetch data from Google Sheets"""
+    """Fetch data from Google Sheets - NO CACHE for real-time updates"""
     if not GSHEETS_AVAILABLE:
         return None
     
@@ -573,11 +575,11 @@ def parse_google_sheets_data(sheet_data):
     return result if result else None
 
 # ============================================
-# LOGIN SECTION
+# LOGIN SECTION (COMPLETE)
 # ============================================
 
 def show_login_page():
-    """Display Iron Lady branded login page"""
+    """Display official Iron Lady branded login page"""
     
     st.markdown(f"""
     <div class="logo-container">
@@ -914,6 +916,160 @@ def show_data_entry_interface():
         st.markdown('<div class="info-msg">📊 No entries yet. Add your first RM entry above to get started!</div>', unsafe_allow_html=True)
 
 # ============================================
+# GOOGLE SHEETS VIEWER TAB (NEW)
+# ============================================
+
+def show_google_sheets_viewer():
+    """Display Google Sheets data viewer"""
+    st.markdown("### 📊 GOOGLE SHEETS VIEWER & IMPORTER")
+    
+    if not GSHEETS_AVAILABLE:
+        st.markdown('<div class="error-msg">❌ <strong>Google Sheets library not installed.</strong><br/>Install with: <code>pip install gspread google-auth</code></div>', unsafe_allow_html=True)
+        return
+    
+    st.markdown('<div class="info-msg">📈 <strong>View and import data directly from your Google Sheets.</strong> Load any Google Sheet to view its contents and import data to your dashboard.</div>', unsafe_allow_html=True)
+    
+    # Configuration section
+    with st.expander("⚙️ CONFIGURE & LOAD GOOGLE SHEETS", expanded=True):
+        st.markdown("#### 🔗 Enter Your Google Sheet Details")
+        
+        sheet_id_input = st.text_input(
+            "📋 Google Sheet ID or URL",
+            placeholder="1abc123xyz... or https://docs.google.com/spreadsheets/d/...",
+            help="Find the Sheet ID in your Google Sheets URL between '/d/' and '/edit'"
+        )
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔄 LOAD SHEET DATA", use_container_width=True, type="primary"):
+                if sheet_id_input:
+                    with st.spinner("⏳ Loading data from Google Sheets..."):
+                        sheet_data = fetch_sheet_data(sheet_id_input)
+                        if sheet_data:
+                            st.session_state.loaded_sheet_data = sheet_data
+                            st.markdown(f'<div class="success-msg">✅ <strong>Success!</strong> Loaded {len(sheet_data)} sheet(s) from Google Sheets</div>', unsafe_allow_html=True)
+                            st.rerun()
+                        else:
+                            st.markdown('<div class="error-msg">❌ <strong>Failed to load sheet data.</strong> Make sure you\'ve shared the sheet with your service account email.</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div class="warning-msg">⚠️ Please enter a Sheet ID or URL first</div>', unsafe_allow_html=True)
+        
+        with col2:
+            if st.button("📥 IMPORT TO MY DASHBOARD", use_container_width=True):
+                if st.session_state.loaded_sheet_data:
+                    parsed = parse_google_sheets_data(st.session_state.loaded_sheet_data)
+                    if parsed and st.session_state.user in parsed:
+                        st.session_state.rm_data_by_lead[st.session_state.user] = parsed[st.session_state.user]
+                        st.markdown(f'<div class="success-msg">✅ <strong>Data imported successfully!</strong> Your dashboard has been updated with the latest data.</div>', unsafe_allow_html=True)
+                        st.rerun()
+                    else:
+                        st.markdown(f'<div class="warning-msg">⚠️ No data found for user: <strong>{st.session_state.user}</strong></div>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div class="warning-msg">⚠️ Please load sheet data first by clicking "Load Sheet Data"</div>', unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        st.markdown("#### ℹ️ How to Share Your Google Sheet")
+        st.markdown("""
+        1. Open your Google Sheet
+        2. Click **Share** button (top right)
+        3. Add your service account email (found in your Streamlit secrets)
+        4. Give **Viewer** access
+        5. Copy the Sheet ID from the URL
+        """)
+    
+    st.markdown("---")
+    
+    # Display loaded data
+    if st.session_state.loaded_sheet_data:
+        st.markdown("### 📄 LOADED SHEET DATA")
+        
+        st.markdown(f'<div class="success-msg">✅ Currently viewing <strong>{len(st.session_state.loaded_sheet_data)}</strong> sheet(s)</div>', unsafe_allow_html=True)
+        
+        # Show tabs for each sheet
+        if len(st.session_state.loaded_sheet_data) > 0:
+            sheet_names = list(st.session_state.loaded_sheet_data.keys())
+            
+            for sheet_name in sheet_names:
+                with st.expander(f"📋 **{sheet_name}**", expanded=True):
+                    df = st.session_state.loaded_sheet_data[sheet_name]
+                    
+                    # Sheet info
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("📊 Total Rows", len(df))
+                    with col2:
+                        st.metric("📋 Total Columns", len(df.columns))
+                    with col3:
+                        st.metric("💾 Size", f"{df.memory_usage(deep=True).sum() / 1024:.1f} KB")
+                    
+                    st.markdown("---")
+                    
+                    # Display dataframe
+                    st.markdown("#### 📊 Data Preview")
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+                    
+                    st.markdown("---")
+                    
+                    # Show column info
+                    st.markdown("#### 📋 Column Information")
+                    cols_display = st.columns(4)
+                    for idx, col in enumerate(df.columns):
+                        with cols_display[idx % 4]:
+                            st.markdown(f"**{col}**")
+                            st.caption(f"Type: {df[col].dtype}")
+        
+        st.markdown("---")
+        
+        # Action buttons
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔄 REFRESH DATA", use_container_width=True, type="secondary"):
+                st.session_state.loaded_sheet_data = None
+                st.markdown('<div class="info-msg">🔄 Data cleared. Click "Load Sheet Data" to refresh from Google Sheets.</div>', unsafe_allow_html=True)
+                st.rerun()
+        
+        with col2:
+            if st.button("📥 RE-IMPORT TO DASHBOARD", use_container_width=True):
+                if st.session_state.loaded_sheet_data:
+                    parsed = parse_google_sheets_data(st.session_state.loaded_sheet_data)
+                    if parsed and st.session_state.user in parsed:
+                        st.session_state.rm_data_by_lead[st.session_state.user] = parsed[st.session_state.user]
+                        st.markdown('<div class="success-msg">✅ Data re-imported to your dashboard!</div>', unsafe_allow_html=True)
+                        st.rerun()
+    
+    else:
+        st.markdown('<div class="info-msg">📊 <strong>No sheet data loaded yet.</strong><br/>Enter a Sheet ID above and click "Load Sheet Data" to get started.</div>', unsafe_allow_html=True)
+        
+        st.markdown("---")
+        st.markdown("### 💡 Quick Start Guide")
+        st.markdown("""
+        <div style="background: white; padding: 20px; border-left: 5px solid #E63946; margin: 20px 0;">
+        <h4 style="margin-top: 0; border: none;">📝 Step-by-Step Instructions:</h4>
+        
+        1. **Prepare Your Google Sheet**
+           - Make sure your sheet has columns like: RM Name, Total RMs, Lead Count, Target Pitch, Actual Pitch, etc.
+           
+        2. **Share Your Sheet**
+           - Share with your service account email (found in Streamlit secrets)
+           - Grant "Viewer" permission
+           
+        3. **Get Sheet ID**
+           - Copy from URL: `docs.google.com/spreadsheets/d/[THIS_IS_YOUR_ID]/edit`
+           
+        4. **Load Data**
+           - Paste the Sheet ID or full URL above
+           - Click "Load Sheet Data"
+           
+        5. **View & Import**
+           - Review the loaded data
+           - Click "Import to My Dashboard" to use it
+        </div>
+        """, unsafe_allow_html=True)
+
+# ============================================
 # CHECKLIST ITEMS (COMPLETE FROM ORIGINAL)
 # ============================================
 
@@ -989,7 +1145,7 @@ def render_checklist_items(items, priority):
                 st.markdown(badge_html, unsafe_allow_html=True)
 
 # ============================================
-# MAIN APP (COMPLETE)
+# MAIN APP (COMPLETE WITH ALL TABS)
 # ============================================
 
 def main():
@@ -997,11 +1153,12 @@ def main():
         show_login_page()
         return
     
-    # Header
+    # Header with branding
     col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
         st.markdown(f"""
-        <div style="background: {IRONLADY_COLORS['accent']}; padding: 20px; border-radius: 0px; border-left: 5px solid {IRONLADY_COLORS['primary']};">
+        <div style="background: {IRONLADY_COLORS['accent']}; 
+                    padding: 20px; border-radius: 0px; border-left: 5px solid {IRONLADY_COLORS['primary']};">
             <h2 style="margin: 0; color: {IRONLADY_COLORS['dark']}; border: none; font-weight: 900; text-transform: uppercase;">🏆 IRON LADY</h2>
             <p style="margin: 5px 0 0 0; color: {IRONLADY_COLORS['dark']}; opacity: 0.8;">Team Leader: <strong>{st.session_state.user}</strong></p>
         </div>
@@ -1023,7 +1180,7 @@ def main():
     
     st.markdown("---")
     
-    # Sidebar
+    # Sidebar controls
     with st.sidebar:
         st.markdown("### ⚙️ DASHBOARD SETTINGS")
         
@@ -1039,38 +1196,7 @@ def main():
         )
         
         st.markdown("---")
-        st.markdown("### 📊 DATA SOURCE")
         
-        use_sheets = st.checkbox("📈 Use Google Sheets", value=st.session_state.use_google_sheets)
-        st.session_state.use_google_sheets = use_sheets
-        
-        if use_sheets:
-            try:
-                sheet_id = st.secrets.get("google_sheet_id", None)
-                if sheet_id:
-                    st.success("✅ Sheet configured")
-                    
-                    if st.button("🔄 Load from Sheets", use_container_width=True):
-                        with st.spinner("Loading..."):
-                            sheet_data = fetch_sheet_data(sheet_id)
-                            if sheet_data:
-                                parsed = parse_google_sheets_data(sheet_data)
-                                if parsed and st.session_state.user in parsed:
-                                    st.session_state.rm_data_by_lead[st.session_state.user] = parsed[st.session_state.user]
-                                    st.success("✅ Data loaded!")
-                                    st.rerun()
-                else:
-                    sheet_input = st.text_input("Sheet ID/URL", placeholder="1abc123xyz...")
-                    if sheet_input and st.button("Load", use_container_width=True):
-                        sheet_data = fetch_sheet_data(sheet_input)
-                        if sheet_data:
-                            parsed = parse_google_sheets_data(sheet_data)
-                            if parsed:
-                                st.success("✅ Loaded")
-            except:
-                st.info("Configure Google Sheets in secrets")
-        
-        st.markdown("---")
         st.markdown("### 📊 QUICK STATS")
         current_data = get_current_user_data()
         metrics = calculate_metrics(current_data)
@@ -1083,6 +1209,7 @@ def main():
         
         st.markdown("---")
         
+        # System info
         st.markdown(f"""
         <div style="background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 0px; margin-top: 20px; border-left: 3px solid {IRONLADY_COLORS['primary']};">
             <p style="margin: 0; font-size: 0.85rem; opacity: 0.9;">
@@ -1093,16 +1220,25 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    # Tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
+    # Tab structure - ADDED GOOGLE SHEETS TAB
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📝 DATA ENTRY",
         "📊 PERFORMANCE DASHBOARD",
+        "📈 GOOGLE SHEETS",
         "📁 DOCUMENT MANAGEMENT",
         "✅ DAILY CHECKLIST"
     ])
     
+    # ============================================
+    # TAB 1: DATA ENTRY (COMPLETE FROM ORIGINAL)
+    # ============================================
+    
     with tab1:
         show_data_entry_interface()
+    
+    # ============================================
+    # TAB 2: DASHBOARD (COMPLETE FROM ORIGINAL)
+    # ============================================
     
     with tab2:
         st.markdown(f"### 📊 TEAM PERFORMANCE OVERVIEW - {st.session_state.selected_day}")
@@ -1110,6 +1246,7 @@ def main():
         current_data = get_current_user_data()
         metrics = calculate_metrics(current_data)
         
+        # Summary cards with enhanced design
         col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
@@ -1162,6 +1299,7 @@ def main():
         
         st.markdown("---")
         
+        # Charts
         col1, col2 = st.columns(2)
         
         with col1:
@@ -1215,6 +1353,8 @@ def main():
             st.plotly_chart(fig, use_container_width=True)
         
         st.markdown("---")
+        
+        # Performance table
         st.markdown("### 📋 DETAILED RM PERFORMANCE")
         
         display_df = current_data[current_data['RM_Name'] != ''].copy()
@@ -1232,7 +1372,18 @@ def main():
         else:
             st.markdown('<div class="info-msg">📊 No RM data available yet. Go to <strong>DATA ENTRY</strong> tab to add team data.</div>', unsafe_allow_html=True)
     
+    # ============================================
+    # TAB 3: GOOGLE SHEETS VIEWER (NEW)
+    # ============================================
+    
     with tab3:
+        show_google_sheets_viewer()
+    
+    # ============================================
+    # TAB 4: FILE UPLOAD (COMPLETE FROM ORIGINAL)
+    # ============================================
+    
+    with tab4:
         st.markdown("### 📁 DOCUMENT MANAGEMENT SYSTEM")
         
         st.markdown(f'<div class="info-msg">📤 <strong>Upload Instructions:</strong> Upload your daily reports, documents, and <strong>screenshots</strong>. Accepted formats: PDF, DOCX, XLSX, PNG, JPG, JPEG. All files are securely tracked.</div>', unsafe_allow_html=True)
@@ -1282,7 +1433,11 @@ def main():
                         st.markdown(f'<div class="success-msg">✅ <strong>{uploaded_file.name}</strong> ({file_size:.1f} KB) ready to upload</div>', unsafe_allow_html=True)
                         st.session_state.files_uploaded[file_info['key']] = uploaded_file.name
     
-    with tab4:
+    # ============================================
+    # TAB 5: CHECKLIST (COMPLETE FROM ORIGINAL)
+    # ============================================
+    
+    with tab5:
         st.markdown("### ✅ DAILY ACTIVITY CHECKLIST")
         
         selected_checklist = CHECKLIST_ITEMS.get(st.session_state.selected_day, [])
@@ -1346,7 +1501,7 @@ def main():
     <div class="footer">
         <p style="font-weight: 900; text-transform: uppercase; letter-spacing: 2px; font-size: 1.1rem; color: {IRONLADY_COLORS['primary']};">IRON LADY SALES TRACKER</p>
         <p style="font-weight: 600;">Team: Ghazala 🏆 | Megha 🏆 | Afreen 🌟 | Soumya 🌟</p>
-        <p style="font-weight: 600;">Official Branded Edition with Manual Data Entry + Google Sheets | v4.0</p>
+        <p style="font-weight: 600;">Official Branded Edition with Manual Data Entry + Google Sheets Viewer | v5.0</p>
         <p style="font-size: 0.75rem; opacity: 0.7; margin-top: 10px;">© 2024 Iron Lady. All rights reserved. | Last updated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</p>
     </div>
     """, unsafe_allow_html=True)

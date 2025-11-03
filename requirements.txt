@@ -5,3 +5,6 @@ gspread
 google-auth
 google-auth-oauthlib
 google-auth-httplib2
+Pillow
+pytesseract
+pdf2image

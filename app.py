@@ -1,6 +1,6 @@
 """
-IRON LADY - STREAMLIT DASHBOARD WITH GOOGLE SHEETS INTEGRATION
-Real-time sales performance tracking dashboard
+IRON LADY - COMPLETE STREAMLIT DASHBOARD
+Features: Google Sheets, File Upload, OCR, Checklist, Analytics
 Team Leaders: Ghazala, Megha, Afreen (Trainee), Soumya (Trainee)
 """
 
@@ -8,16 +8,27 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
+import os
+from io import BytesIO
+from PIL import Image
+import base64
 
-# Try to import Google Sheets libraries
+# Try to import optional libraries
 try:
     import gspread
     from google.oauth2.service_account import Credentials
     GSHEETS_AVAILABLE = True
 except ImportError:
     GSHEETS_AVAILABLE = False
+
+try:
+    import pytesseract
+    from pdf2image import convert_from_bytes
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
 
 # ============================================
 # PAGE CONFIGURATION
@@ -43,15 +54,12 @@ IRONLADY_COLORS = {
     'danger': '#D62828',
 }
 
-# Custom CSS for Iron Lady branding
+# Custom CSS
 st.markdown(f"""
 <style>
-    /* Main background */
     .main {{
         background-color: {IRONLADY_COLORS['accent']};
     }}
-    
-    /* Metrics styling */
     .stMetric {{
         background-color: white;
         padding: 20px;
@@ -59,14 +67,10 @@ st.markdown(f"""
         border-left: 5px solid {IRONLADY_COLORS['primary']};
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }}
-    
-    /* Headers */
     h1, h2, h3 {{
         color: {IRONLADY_COLORS['secondary']};
         font-weight: 900;
     }}
-    
-    /* Buttons */
     .stButton>button {{
         background-color: {IRONLADY_COLORS['primary']};
         color: white;
@@ -77,30 +81,50 @@ st.markdown(f"""
         font-size: 1.1rem;
         transition: all 0.3s;
     }}
-    
     .stButton>button:hover {{
         background-color: {IRONLADY_COLORS['danger']};
         transform: translateY(-2px);
         box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     }}
-    
-    /* Sidebar */
-    .css-1d391kg {{
-        background-color: white;
-    }}
-    
-    /* Dataframe */
-    .dataframe {{
-        border: 2px solid {IRONLADY_COLORS['primary']};
+    .checklist-item {{
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 8px;
+        border-left: 5px solid {IRONLADY_COLORS['primary']};
+        background: white;
     }}
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================
-# TEAM LEADERS - UPDATED NAMES
+# TEAM LEADERS & CHECKLIST
 # ============================================
 
 TEAM_LEADERS = ['Ghazala', 'Megha', 'Afreen', 'Soumya']
+
+DEFAULT_CHECKLIST = [
+    {'task': 'WA Audit - Minimum 10', 'priority': 'high'},
+    {'task': 'SL Calls - 5', 'priority': 'high'},
+    {'task': 'Call Audit - Minimum 5 calls', 'priority': 'medium'},
+    {'task': 'CRM Updated', 'priority': 'high'},
+    {'task': 'Hot prospects list shared', 'priority': 'high'},
+    {'task': 'Follow up calls - 2 Registrations', 'priority': 'high'},
+]
+
+# ============================================
+# SESSION STATE INITIALIZATION
+# ============================================
+
+def init_session_state():
+    """Initialize session state variables"""
+    if 'selected_tl' not in st.session_state:
+        st.session_state.selected_tl = None
+    if 'checklist' not in st.session_state:
+        st.session_state.checklist = {task['task']: False for task in DEFAULT_CHECKLIST}
+    if 'uploaded_files_data' not in st.session_state:
+        st.session_state.uploaded_files_data = []
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = 'dashboard'
 
 # ============================================
 # GOOGLE SHEETS CONNECTION
@@ -113,10 +137,7 @@ def connect_to_google_sheets():
         return None
     
     try:
-        # Get credentials from Streamlit secrets
         credentials_dict = st.secrets["gcp_service_account"]
-        
-        # Create credentials
         credentials = Credentials.from_service_account_info(
             credentials_dict,
             scopes=[
@@ -124,19 +145,13 @@ def connect_to_google_sheets():
                 'https://www.googleapis.com/auth/drive.readonly'
             ]
         )
-        
-        # Authorize and return client
         client = gspread.authorize(credentials)
         return client
-        
-    except KeyError:
-        st.warning("⚠️ Google Sheets credentials not found in secrets")
-        return None
     except Exception as e:
-        st.error(f"❌ Error connecting to Google Sheets: {e}")
+        st.error(f"❌ Google Sheets connection error: {e}")
         return None
 
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+@st.cache_data(ttl=300)
 def fetch_sheet_data(sheet_id):
     """Fetch data from Google Sheets"""
     if not GSHEETS_AVAILABLE:
@@ -147,26 +162,31 @@ def fetch_sheet_data(sheet_id):
         if not client:
             return None
         
-        # Open spreadsheet by ID
-        spreadsheet = client.open_by_key(sheet_id)
+        # Open spreadsheet by ID or URL
+        try:
+            if 'docs.google.com' in sheet_id:
+                # Extract ID from URL
+                sheet_id = sheet_id.split('/d/')[1].split('/')[0]
+            spreadsheet = client.open_by_key(sheet_id)
+        except Exception as e:
+            st.error(f"❌ Could not open spreadsheet. Make sure the sheet is shared with the service account email.")
+            return None
         
         data = {}
-        
-        # Get all worksheets
         worksheets = spreadsheet.worksheets()
         
         for worksheet in worksheets:
             sheet_name = worksheet.title
-            
-            # Get all values as records
             records = worksheet.get_all_records()
-            
             if records:
                 df = pd.DataFrame(records)
                 data[sheet_name] = df
         
         return data
         
+    except gspread.exceptions.APIError as e:
+        st.error(f"❌ API Error: {e}. Check if the sheet is shared with the service account.")
+        return None
     except Exception as e:
         st.error(f"❌ Error fetching sheet data: {e}")
         return None
@@ -179,7 +199,6 @@ def parse_team_data(sheet_data):
     team_data = []
     
     for sheet_name, df in sheet_data.items():
-        # Try to find the name column
         name_col = None
         for col in df.columns:
             col_upper = str(col).upper()
@@ -190,13 +209,10 @@ def parse_team_data(sheet_data):
         if not name_col:
             continue
         
-        # Look for data for each team leader
         for _, row in df.iterrows():
             name = str(row.get(name_col, '')).strip()
             
-            # Check if this is one of our team leaders
             if name in TEAM_LEADERS:
-                # Initialize entry
                 entry = {
                     'name': name,
                     'rms': 0,
@@ -206,7 +222,7 @@ def parse_team_data(sheet_data):
                     'reg_actual': 0,
                 }
                 
-                # Extract RMs
+                # Extract data with multiple column name variations
                 for col in ['Total RMs', 'RMs', 'RM Count', 'Number of RMs', 'Total RM']:
                     if col in df.columns:
                         val = row.get(col, 0)
@@ -214,32 +230,28 @@ def parse_team_data(sheet_data):
                             entry['rms'] = int(val)
                             break
                 
-                # Extract Pitch Target
-                for col in ['Target Pitch', 'Pitch Target', 'Target', 'Pitch Goal', 'Target Pitches']:
+                for col in ['Target Pitch', 'Pitch Target', 'Target', 'Pitch Goal']:
                     if col in df.columns:
                         val = row.get(col, 0)
                         if pd.notna(val):
                             entry['pitches_target'] = int(val)
                             break
                 
-                # Extract Pitch Actual
-                for col in ['Actual Pitch', 'Pitch Actual', 'Achieved', 'Pitch Done', 'Pitches', 'Actual Pitches']:
+                for col in ['Actual Pitch', 'Pitch Actual', 'Achieved', 'Pitches']:
                     if col in df.columns:
                         val = row.get(col, 0)
                         if pd.notna(val):
                             entry['pitches_actual'] = int(val)
                             break
                 
-                # Extract Registration Target
-                for col in ['Target Registration', 'Registration Target', 'Target Reg', 'Reg Target', 'Target Registrations']:
+                for col in ['Target Registration', 'Registration Target', 'Target Reg']:
                     if col in df.columns:
                         val = row.get(col, 0)
                         if pd.notna(val):
                             entry['reg_target'] = int(val)
                             break
                 
-                # Extract Registration Actual
-                for col in ['Actual Registration', 'Registration Actual', 'Actual Reg', 'Reg Done', 'Registrations', 'Actual Registrations']:
+                for col in ['Actual Registration', 'Registration Actual', 'Actual Reg', 'Registrations']:
                     if col in df.columns:
                         val = row.get(col, 0)
                         if pd.notna(val):
@@ -267,11 +279,55 @@ def parse_team_data(sheet_data):
     return team_data if team_data else None
 
 # ============================================
-# SAMPLE DATA (FALLBACK)
+# FILE UPLOAD & OCR
+# ============================================
+
+def process_uploaded_file(uploaded_file):
+    """Process uploaded file and extract text"""
+    file_data = {
+        'filename': uploaded_file.name,
+        'type': uploaded_file.type,
+        'size': uploaded_file.size,
+        'text': '',
+        'uploaded_at': datetime.now()
+    }
+    
+    try:
+        if uploaded_file.type == 'application/pdf':
+            if OCR_AVAILABLE:
+                images = convert_from_bytes(uploaded_file.read())
+                text = ''
+                for img in images:
+                    text += pytesseract.image_to_string(img)
+                file_data['text'] = text
+            else:
+                file_data['text'] = "OCR not available. Install pytesseract and pdf2image."
+        
+        elif uploaded_file.type.startswith('image/'):
+            if OCR_AVAILABLE:
+                image = Image.open(uploaded_file)
+                text = pytesseract.image_to_string(image)
+                file_data['text'] = text
+            else:
+                file_data['text'] = "OCR not available. Install pytesseract."
+        
+        elif uploaded_file.type == 'text/plain':
+            file_data['text'] = uploaded_file.read().decode('utf-8')
+        
+        else:
+            file_data['text'] = "Unsupported file type"
+        
+    except Exception as e:
+        file_data['text'] = f"Error processing file: {e}"
+    
+    return file_data
+
+# ============================================
+# SAMPLE DATA
 # ============================================
 
 def get_sample_data():
-    """Sample data for Ghazala, Megha, Afreen, Soumya"""
+    """Sample data for demo"""
     return [
         {
             'name': 'Ghazala',
@@ -324,7 +380,6 @@ def get_sample_data():
 # ============================================
 
 def get_status_color(percentage):
-    """Get status color based on percentage"""
     if percentage >= 90:
         return IRONLADY_COLORS['success']
     elif percentage >= 75:
@@ -333,7 +388,6 @@ def get_status_color(percentage):
         return IRONLADY_COLORS['danger']
 
 def get_status_text(percentage):
-    """Get status text based on percentage"""
     if percentage >= 90:
         return "Excellent 🎯"
     elif percentage >= 75:
@@ -344,253 +398,99 @@ def get_status_text(percentage):
         return "Needs Attention ❌"
 
 # ============================================
-# MAIN DASHBOARD
+# PAGE: DASHBOARD
 # ============================================
 
-def main():
-    # Header with Iron Lady branding
-    st.markdown(f"""
-    <div style="text-align: center; padding: 50px 30px; background: {IRONLADY_COLORS['accent']}; border-top: 8px solid {IRONLADY_COLORS['primary']}; border-bottom: 8px solid {IRONLADY_COLORS['primary']}; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-        <h1 style="font-size: 4rem; margin: 0; letter-spacing: 8px; color: {IRONLADY_COLORS['secondary']}; text-transform: uppercase;">IRON LADY</h1>
-        <div style="background: {IRONLADY_COLORS['primary']}; height: 4px; width: 150px; margin: 20px auto;"></div>
-        <p style="font-size: 1.3rem; margin: 0; color: {IRONLADY_COLORS['secondary']}; font-weight: 600;">Sales Performance Management System</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Initialize session state
-    if 'selected_tl' not in st.session_state:
-        st.session_state.selected_tl = None
-    
-    # Sidebar Configuration
-    with st.sidebar:
-        st.markdown("### ⚙️ DASHBOARD SETTINGS")
-        
-        st.markdown("---")
-        st.markdown("### 📊 DATA SOURCE")
-        
-        use_sheets = st.checkbox("📈 Use Google Sheets (Live Data)", value=True)
-        
-        sheet_id = None
-        if use_sheets:
-            # Try to get from secrets first
-            try:
-                sheet_id = st.secrets.get("google_sheet_id", None)
-                if sheet_id:
-                    st.success("✅ Sheet ID configured")
-                else:
-                    sheet_id = st.text_input("Enter Google Sheet ID", placeholder="1abc123xyz...", help="Find this in your Google Sheets URL")
-            except:
-                sheet_id = st.text_input("Enter Google Sheet ID", placeholder="1abc123xyz...", help="Find this in your Google Sheets URL")
-        
-        st.markdown("---")
-        
-        # Refresh button
-        if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
-            st.cache_data.clear()
-            st.rerun()
-        
-        # Last updated timestamp
-        st.info(f"**⏰ Last Updated**\n{datetime.now().strftime('%I:%M %p')}")
-        
-        st.markdown("---")
-        
-        # Team Leaders info
-        st.markdown("### 👥 TEAM LEADERS")
-        st.markdown("""
-        🏆 **Ghazala** (Senior TL)  
-        🏆 **Megha** (Senior TL)  
-        🌟 **Afreen** (TL Trainee)  
-        🌟 **Soumya** (TL Trainee)
-        """)
-        
-        st.markdown("---")
-        
-        # Back to overview button
-        if st.session_state.selected_tl:
-            if st.button("⬅️ Back to Overview", use_container_width=True):
-                st.session_state.selected_tl = None
-                st.rerun()
-    
-    # Fetch Data from Google Sheets or use sample data
-    team_data = None
-    data_source = "📝 Sample Data (Demo Mode)"
-    
-    if use_sheets and sheet_id:
-        with st.spinner("📊 Loading data from Google Sheets..."):
-            sheet_data = fetch_sheet_data(sheet_id)
-            if sheet_data:
-                team_data = parse_team_data(sheet_data)
-                if team_data:
-                    data_source = "📊 Google Sheets (Live Data)"
-                    st.success(f"✅ Successfully loaded data for {len(team_data)} team leaders")
-                else:
-                    st.warning("⚠️ No matching data found in Google Sheets. Using sample data.")
-            else:
-                st.warning("⚠️ Could not fetch Google Sheets data. Using sample data.")
-    
-    # Fallback to sample data if Google Sheets failed or not configured
-    if not team_data:
-        team_data = get_sample_data()
-    
-    # Convert to DataFrame
-    df = pd.DataFrame(team_data)
-    
-    # Data Source Badge
-    badge_color = '#d4edda' if 'Live' in data_source else '#fff3cd'
-    st.markdown(f"""
-    <div style="text-align: center; padding: 18px; background: {badge_color}; border-radius: 12px; margin-bottom: 25px; border-left: 6px solid {IRONLADY_COLORS['primary']}; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-        <strong style="font-size: 1.1rem;">📊 Data Source:</strong> <span style="font-size: 1.1rem;">{data_source}</span><br>
-        <strong style="font-size: 0.95rem;">🕐 Updated:</strong> <span style="font-size: 0.95rem;">{datetime.now().strftime('%B %d, %Y at %I:%M %p IST')}</span>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # ============================================
-    # INDIVIDUAL TL DASHBOARD
-    # ============================================
+def show_dashboard(df):
+    """Main dashboard view"""
     
     if st.session_state.selected_tl:
-        # Individual TL Dashboard View
+        # Individual TL Dashboard
         tl_name = st.session_state.selected_tl
         tl_data = df[df['name'] == tl_name].iloc[0]
         
         st.markdown(f"""
-        <div style="text-align: center; padding: 25px; background: white; border-radius: 12px; border-left: 6px solid {IRONLADY_COLORS['primary']}; margin-bottom: 25px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <div style="text-align: center; padding: 25px; background: white; border-radius: 12px; border-left: 6px solid {IRONLADY_COLORS['primary']}; margin-bottom: 25px;">
             <h2 style="margin: 0; color: {IRONLADY_COLORS['primary']};">👤 {tl_name}'s Performance Dashboard</h2>
         </div>
         """, unsafe_allow_html=True)
         
-        # TL Metrics Row
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric(
-                label="💼 Relationship Managers",
-                value=tl_data['rms'],
-                help="Total number of RMs under supervision"
-            )
+            st.metric("💼 RMs", tl_data['rms'])
         
         with col2:
             st.metric(
-                label="🎯 Pitch Achievement",
-                value=f"{tl_data['pitch_achievement']:.1f}%",
-                delta=f"{tl_data['pitches_actual']}/{tl_data['pitches_target']}",
-                help="Pitches completed vs target"
+                "🎯 Pitch Achievement",
+                f"{tl_data['pitch_achievement']:.1f}%",
+                f"{tl_data['pitches_actual']}/{tl_data['pitches_target']}"
             )
         
         with col3:
             st.metric(
-                label="📝 Registration Achievement",
-                value=f"{tl_data['reg_achievement']:.1f}%",
-                delta=f"{tl_data['reg_actual']}/{tl_data['reg_target']}",
-                help="Registrations achieved vs target"
+                "📝 Registration Achievement",
+                f"{tl_data['reg_achievement']:.1f}%",
+                f"{tl_data['reg_actual']}/{tl_data['reg_target']}"
             )
         
         with col4:
-            status = get_status_text(tl_data['conversion'])
             st.metric(
-                label="💯 Conversion Rate",
-                value=f"{tl_data['conversion']:.1f}%",
-                delta=status,
-                help="Registration rate from pitches"
+                "💯 Conversion Rate",
+                f"{tl_data['conversion']:.1f}%"
             )
         
         st.markdown("---")
         
-        # Performance Charts
         col1, col2 = st.columns(2)
         
         with col1:
             st.markdown("### 📊 Achievement Overview")
             fig = go.Figure()
             fig.add_trace(go.Bar(
-                x=['Pitch Achievement', 'Registration Achievement'],
+                x=['Pitch', 'Registration'],
                 y=[tl_data['pitch_achievement'], tl_data['reg_achievement']],
                 marker_color=[IRONLADY_COLORS['success'], IRONLADY_COLORS['warning']],
                 text=[f"{tl_data['pitch_achievement']:.1f}%", f"{tl_data['reg_achievement']:.1f}%"],
                 textposition='outside'
             ))
-            fig.update_layout(
-                height=400,
-                yaxis_title='Achievement (%)',
-                yaxis_range=[0, 110],
-                showlegend=False
-            )
+            fig.update_layout(height=400, yaxis_range=[0, 110])
             st.plotly_chart(fig, use_container_width=True)
         
         with col2:
-            st.markdown("### 🎯 Detailed Progress")
+            st.markdown("### 🎯 Progress Details")
             progress_df = pd.DataFrame({
                 'Metric': ['Pitches', 'Registrations'],
                 'Target': [tl_data['pitches_target'], tl_data['reg_target']],
                 'Actual': [tl_data['pitches_actual'], tl_data['reg_actual']],
-                'Achievement': [f"{tl_data['pitch_achievement']:.1f}%", f"{tl_data['reg_achievement']:.1f}%"],
-                'Gap': [
-                    tl_data['pitches_target'] - tl_data['pitches_actual'],
-                    tl_data['reg_target'] - tl_data['reg_actual']
-                ]
+                'Achievement': [f"{tl_data['pitch_achievement']:.1f}%", f"{tl_data['reg_achievement']:.1f}%"]
             })
-            st.dataframe(
-                progress_df,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Metric": st.column_config.TextColumn("Metric", width="medium"),
-                    "Target": st.column_config.NumberColumn("Target", width="small"),
-                    "Actual": st.column_config.NumberColumn("Actual", width="small"),
-                    "Achievement": st.column_config.TextColumn("Achievement %", width="medium"),
-                    "Gap": st.column_config.NumberColumn("Gap", width="small"),
-                }
-            )
-        
-        st.markdown("---")
-        
-        # Performance Status
-        conversion_color = get_status_color(tl_data['conversion'])
-        st.markdown(f"""
-        <div style="padding: 25px; background: {conversion_color}; color: white; border-radius: 12px; text-align: center; margin: 20px 0;">
-            <h3 style="margin: 0; color: white;">Overall Performance Status</h3>
-            <p style="margin: 10px 0 0 0; font-size: 1.5rem; font-weight: 900;">{get_status_text(tl_data['conversion'])}</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # ============================================
-    # OVERVIEW DASHBOARD (TEAM SELECTION)
-    # ============================================
+            st.dataframe(progress_df, use_container_width=True, hide_index=True)
     
     else:
-        # Welcome message with team selection
+        # Team Overview Dashboard
         st.markdown(f"""
-        <div style="padding: 25px; background: white; border-radius: 12px; border-left: 6px solid {IRONLADY_COLORS['warning']}; margin-bottom: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <h3 style="margin: 0; color: {IRONLADY_COLORS['secondary']};">👋 Welcome! Select your name to access your dashboard</h3>
+        <div style="padding: 25px; background: white; border-radius: 12px; border-left: 6px solid {IRONLADY_COLORS['warning']}; margin-bottom: 30px;">
+            <h3 style="margin: 0;">👋 Welcome! Select your name to access your dashboard</h3>
         </div>
         """, unsafe_allow_html=True)
         
         st.markdown("### 👥 TEAM LEADERS")
         
-        # Create team leader selection buttons
         col1, col2 = st.columns(2)
         
-        tl_list = TEAM_LEADERS
-        
-        for idx, tl in enumerate(tl_list):
+        for idx, tl in enumerate(TEAM_LEADERS):
             role = "Senior TL" if tl in ['Ghazala', 'Megha'] else "TL Trainee"
             icon = "🏆" if tl in ['Ghazala', 'Megha'] else "🌟"
             
             with col1 if idx % 2 == 0 else col2:
-                button_html = f"""
-                <div style="background: {IRONLADY_COLORS['primary']}; color: white; padding: 25px; text-align: center; font-size: 1.2rem; font-weight: 900; border-radius: 12px; cursor: pointer; margin: 15px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: all 0.3s;">
-                    {icon} {tl.upper()}<br>
-                    <span style="font-size: 0.8rem; font-weight: 400;">({role})</span>
-                </div>
-                """
-                
-                if st.button(f"{icon} {tl.upper()}", key=f"tl_{tl}", use_container_width=True, type="primary"):
+                if st.button(f"{icon} {tl.upper()} ({role})", key=f"tl_{tl}", use_container_width=True):
                     st.session_state.selected_tl = tl
                     st.rerun()
         
         st.markdown("---")
         
-        # Calculate overall team totals
+        # Overall Metrics
         total_rms = df['rms'].sum()
         total_pitch_target = df['pitches_target'].sum()
         total_pitch_actual = df['pitches_actual'].sum()
@@ -601,170 +501,259 @@ def main():
         overall_reg_achievement = round((total_reg_actual / total_reg_target * 100), 1) if total_reg_target > 0 else 0
         overall_conversion = round((total_reg_actual / total_pitch_actual * 100), 1) if total_pitch_actual > 0 else 0
         
-        # Overall Team Metrics
         st.markdown("### 📊 OVERALL TEAM PERFORMANCE")
         
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric(
-                label="💼 Total RMs",
-                value=total_rms,
-                help="Total Relationship Managers across all teams"
-            )
+            st.metric("💼 Total RMs", total_rms)
         
         with col2:
-            st.metric(
-                label="🎯 Pitch Achievement",
-                value=f"{overall_pitch_achievement:.1f}%",
-                delta=f"{total_pitch_actual}/{total_pitch_target}",
-                help="Overall pitch completion rate"
-            )
+            st.metric("🎯 Pitch Achievement", f"{overall_pitch_achievement:.1f}%", f"{total_pitch_actual}/{total_pitch_target}")
         
         with col3:
-            st.metric(
-                label="📝 Registration Achievement",
-                value=f"{overall_reg_achievement:.1f}%",
-                delta=f"{total_reg_actual}/{total_reg_target}",
-                help="Overall registration completion rate"
-            )
+            st.metric("📝 Registration Achievement", f"{overall_reg_achievement:.1f}%", f"{total_reg_actual}/{total_reg_target}")
         
         with col4:
-            st.metric(
-                label="💯 Team Conversion Rate",
-                value=f"{overall_conversion:.1f}%",
-                delta=get_status_text(overall_conversion),
-                help="Overall conversion from pitches to registrations"
-            )
+            st.metric("💯 Conversion Rate", f"{overall_conversion:.1f}%")
         
         st.markdown("---")
         
-        # Detailed Team Performance Table
+        # Team Table
         st.markdown("### 📈 DETAILED TEAM PERFORMANCE")
         
         display_df = df.copy()
-        display_df['Pitch Progress'] = display_df.apply(
-            lambda x: f"{x['pitches_actual']}/{x['pitches_target']} ({x['pitch_achievement']:.1f}%)", axis=1
-        )
-        display_df['Reg Progress'] = display_df.apply(
-            lambda x: f"{x['reg_actual']}/{x['reg_target']} ({x['reg_achievement']:.1f}%)", axis=1
-        )
+        display_df['Pitches'] = display_df.apply(lambda x: f"{x['pitches_actual']}/{x['pitches_target']}", axis=1)
+        display_df['Registrations'] = display_df.apply(lambda x: f"{x['reg_actual']}/{x['reg_target']}", axis=1)
         display_df['Conversion'] = display_df['conversion'].apply(lambda x: f"{x:.1f}%")
-        display_df['Status'] = display_df['conversion'].apply(get_status_text)
         
-        table_df = display_df[['name', 'rms', 'Pitch Progress', 'Reg Progress', 'Conversion', 'Status']]
-        table_df.columns = ['Team Leader', 'RMs', 'Pitches', 'Registrations', 'Conversion Rate', 'Status']
+        table_df = display_df[['name', 'rms', 'Pitches', 'Registrations', 'Conversion']]
+        table_df.columns = ['Team Leader', 'RMs', 'Pitches', 'Registrations', 'Conversion']
         
-        st.dataframe(
-            table_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Team Leader": st.column_config.TextColumn("Team Leader", width="medium"),
-                "RMs": st.column_config.NumberColumn("RMs", width="small"),
-                "Pitches": st.column_config.TextColumn("Pitches", width="medium"),
-                "Registrations": st.column_config.TextColumn("Registrations", width="medium"),
-                "Conversion Rate": st.column_config.TextColumn("Conversion Rate", width="small"),
-                "Status": st.column_config.TextColumn("Status", width="medium"),
-            }
-        )
+        st.dataframe(table_df, use_container_width=True, hide_index=True)
         
         st.markdown("---")
         
-        # Performance Comparison Charts
+        # Charts
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("### 📊 Conversion Rate Comparison")
-            fig1 = px.bar(
-                df,
-                x='name',
-                y='conversion',
-                color='conversion',
-                color_continuous_scale=['#D62828', '#F77F00', '#2A9D8F'],
-                labels={'name': 'Team Leader', 'conversion': 'Conversion Rate (%)'},
-                text='conversion'
-            )
-            fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig1.update_layout(showlegend=False, height=400, yaxis_range=[0, max(df['conversion']) + 10])
-            st.plotly_chart(fig1, use_container_width=True)
+            st.markdown("### 📊 Conversion Comparison")
+            fig = px.bar(df, x='name', y='conversion', color='conversion',
+                        color_continuous_scale=['#D62828', '#F77F00', '#2A9D8F'])
+            fig.update_layout(showlegend=False, height=400)
+            st.plotly_chart(fig, use_container_width=True)
         
         with col2:
             st.markdown("### 🎯 Achievement Comparison")
-            fig2 = go.Figure()
-            fig2.add_trace(go.Bar(
-                name='Pitch Achievement',
-                x=df['name'],
-                y=df['pitch_achievement'],
-                marker_color=IRONLADY_COLORS['success'],
-                text=df['pitch_achievement'],
-                texttemplate='%{text:.1f}%',
-                textposition='outside'
-            ))
-            fig2.add_trace(go.Bar(
-                name='Registration Achievement',
-                x=df['name'],
-                y=df['reg_achievement'],
-                marker_color=IRONLADY_COLORS['warning'],
-                text=df['reg_achievement'],
-                texttemplate='%{text:.1f}%',
-                textposition='outside'
-            ))
-            fig2.update_layout(
-                barmode='group',
-                height=400,
-                xaxis_title='Team Leader',
-                yaxis_title='Achievement (%)',
-                yaxis_range=[0, 110]
-            )
-            st.plotly_chart(fig2, use_container_width=True)
+            fig = go.Figure()
+            fig.add_trace(go.Bar(name='Pitch', x=df['name'], y=df['pitch_achievement'], marker_color=IRONLADY_COLORS['success']))
+            fig.add_trace(go.Bar(name='Registration', x=df['name'], y=df['reg_achievement'], marker_color=IRONLADY_COLORS['warning']))
+            fig.update_layout(barmode='group', height=400)
+            st.plotly_chart(fig, use_container_width=True)
+
+# ============================================
+# PAGE: CHECKLIST
+# ============================================
+
+def show_checklist():
+    """Daily checklist page"""
+    st.markdown(f"""
+    <div style="text-align: center; padding: 25px; background: white; border-radius: 12px; border-left: 6px solid {IRONLADY_COLORS['primary']}; margin-bottom: 25px;">
+        <h2 style="margin: 0; color: {IRONLADY_COLORS['primary']};">✅ DAILY CHECKLIST</h2>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    completed = sum(1 for v in st.session_state.checklist.values() if v)
+    total = len(st.session_state.checklist)
+    completion_rate = (completed / total * 100) if total > 0 else 0
+    
+    st.progress(completion_rate / 100, text=f"Progress: {completed}/{total} tasks ({completion_rate:.0f}%)")
+    
+    st.markdown("---")
+    
+    for task_item in DEFAULT_CHECKLIST:
+        task = task_item['task']
+        priority = task_item['priority']
+        
+        col1, col2 = st.columns([0.1, 0.9])
+        
+        with col1:
+            checked = st.checkbox("", value=st.session_state.checklist[task], key=f"check_{task}", label_visibility="collapsed")
+            st.session_state.checklist[task] = checked
+        
+        with col2:
+            priority_icon = "🔴" if priority == "high" else "🟡"
+            status_icon = "✅" if checked else "⏳"
+            st.markdown(f"{status_icon} {priority_icon} **{task}**")
+    
+    st.markdown("---")
+    
+    if st.button("🔄 Reset Checklist", use_container_width=True):
+        st.session_state.checklist = {task['task']: False for task in DEFAULT_CHECKLIST}
+        st.rerun()
+
+# ============================================
+# PAGE: FILE UPLOAD
+# ============================================
+
+def show_file_upload():
+    """File upload and OCR page"""
+    st.markdown(f"""
+    <div style="text-align: center; padding: 25px; background: white; border-radius: 12px; border-left: 6px solid {IRONLADY_COLORS['primary']}; margin-bottom: 25px;">
+        <h2 style="margin: 0; color: {IRONLADY_COLORS['primary']};">📁 FILE UPLOAD & DOCUMENT ANALYSIS</h2>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if not OCR_AVAILABLE:
+        st.warning("⚠️ OCR features require `pytesseract` and `pdf2image`. Some features may be limited.")
+    
+    uploaded_files = st.file_uploader(
+        "Upload documents (PDF, Images, Text files)",
+        type=['pdf', 'png', 'jpg', 'jpeg', 'txt'],
+        accept_multiple_files=True,
+        help="Upload attendance sheets, reports, or any documents for analysis"
+    )
+    
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
+            with st.spinner(f"Processing {uploaded_file.name}..."):
+                file_data = process_uploaded_file(uploaded_file)
+                st.session_state.uploaded_files_data.append(file_data)
+        
+        st.success(f"✅ Processed {len(uploaded_files)} file(s)")
+    
+    if st.session_state.uploaded_files_data:
+        st.markdown("---")
+        st.markdown("### 📊 Uploaded Files")
+        
+        for idx, file_data in enumerate(st.session_state.uploaded_files_data):
+            with st.expander(f"📄 {file_data['filename']} ({file_data['size']} bytes)"):
+                st.markdown(f"**Type:** {file_data['type']}")
+                st.markdown(f"**Uploaded:** {file_data['uploaded_at'].strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                if file_data['text']:
+                    st.markdown("**Extracted Text:**")
+                    st.text_area("", file_data['text'][:1000], height=200, key=f"text_{idx}", label_visibility="collapsed")
+                    
+                    if len(file_data['text']) > 1000:
+                        st.info(f"Showing first 1000 characters. Total: {len(file_data['text'])} characters")
+        
+        if st.button("🗑️ Clear All Files", use_container_width=True):
+            st.session_state.uploaded_files_data = []
+            st.rerun()
+
+# ============================================
+# MAIN APPLICATION
+# ============================================
+
+def main():
+    init_session_state()
+    
+    # Header
+    st.markdown(f"""
+    <div style="text-align: center; padding: 50px 30px; background: {IRONLADY_COLORS['accent']}; border-top: 8px solid {IRONLADY_COLORS['primary']}; border-bottom: 8px solid {IRONLADY_COLORS['primary']}; margin-bottom: 30px;">
+        <h1 style="font-size: 4rem; margin: 0; letter-spacing: 8px; color: {IRONLADY_COLORS['secondary']};">IRON LADY</h1>
+        <div style="background: {IRONLADY_COLORS['primary']}; height: 4px; width: 150px; margin: 20px auto;"></div>
+        <p style="font-size: 1.3rem; margin: 0; color: {IRONLADY_COLORS['secondary']}; font-weight: 600;">Sales Performance Management System</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Sidebar
+    with st.sidebar:
+        st.markdown("### ⚙️ NAVIGATION")
+        
+        page = st.radio(
+            "",
+            ["📊 Dashboard", "✅ Checklist", "📁 File Upload"],
+            label_visibility="collapsed"
+        )
+        
+        st.markdown("---")
+        st.markdown("### 📊 DATA SOURCE")
+        
+        use_sheets = st.checkbox("📈 Use Google Sheets", value=True)
+        
+        sheet_id = None
+        if use_sheets:
+            try:
+                sheet_id = st.secrets.get("google_sheet_id", None)
+                if sheet_id:
+                    st.success("✅ Sheet ID configured")
+                    
+                    # Show service account email for sharing
+                    try:
+                        service_email = st.secrets["gcp_service_account"]["client_email"]
+                        with st.expander("📧 Service Account Email"):
+                            st.code(service_email, language=None)
+                            st.caption("Share your Google Sheet with this email")
+                    except:
+                        pass
+                else:
+                    sheet_id = st.text_input("Google Sheet ID or URL", placeholder="1abc123xyz...")
+            except:
+                sheet_id = st.text_input("Google Sheet ID or URL", placeholder="1abc123xyz...")
         
         st.markdown("---")
         
-        # Team Leaderboard
-        st.markdown("### 🏆 PERFORMANCE LEADERBOARD")
+        if st.button("🔄 Refresh", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
         
-        leaderboard_df = df.sort_values('conversion', ascending=False).copy()
-        leaderboard_df['Rank'] = range(1, len(leaderboard_df) + 1)
-        leaderboard_df['Medal'] = ['🥇', '🥈', '🥉', '📊'][:len(leaderboard_df)]
+        st.info(f"**⏰ Updated**\n{datetime.now().strftime('%I:%M %p')}")
         
-        leaderboard_display = leaderboard_df[['Rank', 'Medal', 'name', 'conversion']]
-        leaderboard_display.columns = ['Rank', '', 'Team Leader', 'Conversion Rate (%)']
+        st.markdown("---")
+        st.markdown("### 👥 TEAM")
+        st.markdown("🏆 Ghazala\n🏆 Megha\n🌟 Afreen\n🌟 Soumya")
         
-        st.dataframe(
-            leaderboard_display,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Rank": st.column_config.NumberColumn("Rank", width="small"),
-                "": st.column_config.TextColumn("", width="small"),
-                "Team Leader": st.column_config.TextColumn("Team Leader", width="large"),
-                "Conversion Rate (%)": st.column_config.NumberColumn("Conversion Rate (%)", format="%.1f", width="medium"),
-            }
-        )
+        if st.session_state.selected_tl:
+            st.markdown("---")
+            if st.button("⬅️ Back", use_container_width=True):
+                st.session_state.selected_tl = None
+                st.rerun()
     
-    # ============================================
-    # FOOTER
-    # ============================================
+    # Fetch Data
+    team_data = None
+    data_source = "📝 Sample Data"
     
-    st.markdown("---")
+    if use_sheets and sheet_id:
+        with st.spinner("📊 Loading from Google Sheets..."):
+            sheet_data = fetch_sheet_data(sheet_id)
+            if sheet_data:
+                team_data = parse_team_data(sheet_data)
+                if team_data:
+                    data_source = "📊 Google Sheets (Live)"
+                    st.success(f"✅ Loaded {len(team_data)} team leaders")
+    
+    if not team_data:
+        team_data = get_sample_data()
+    
+    df = pd.DataFrame(team_data)
+    
+    # Data Source Badge
+    badge_color = '#d4edda' if 'Live' in data_source else '#fff3cd'
     st.markdown(f"""
-    <div style="text-align: center; padding: 30px; background: {IRONLADY_COLORS['accent']}; border-radius: 12px; border-top: 4px solid {IRONLADY_COLORS['primary']}; border-bottom: 4px solid {IRONLADY_COLORS['primary']}; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-        <p style="margin: 0; font-weight: 900; font-size: 1.8rem; color: {IRONLADY_COLORS['secondary']}; letter-spacing: 3px;">IRON LADY</p>
-        <div style="background: {IRONLADY_COLORS['primary']}; height: 3px; width: 100px; margin: 15px auto;"></div>
-        <p style="margin: 10px 0 0 0; font-size: 1.1rem; color: {IRONLADY_COLORS['secondary']}; font-weight: 600;">Sales Performance Management System</p>
-        <p style="margin: 15px 0 0 0; font-size: 0.9rem; color: {IRONLADY_COLORS['secondary']}; opacity: 0.7;">
-            Team Leaders: Ghazala 🏆 | Megha 🏆 | Afreen 🌟 | Soumya 🌟
-        </p>
-        <p style="margin: 10px 0 0 0; font-size: 0.8rem; color: {IRONLADY_COLORS['secondary']}; opacity: 0.6;">
-            © 2024 Iron Lady. All rights reserved.
-        </p>
+    <div style="text-align: center; padding: 15px; background: {badge_color}; border-radius: 10px; margin-bottom: 20px; border-left: 6px solid {IRONLADY_COLORS['primary']};">
+        <strong>📊 Source:</strong> {data_source} | <strong>🕐 Updated:</strong> {datetime.now().strftime('%I:%M %p')}
     </div>
     """, unsafe_allow_html=True)
-
-# ============================================
-# RUN APPLICATION
-# ============================================
+    
+    # Page Routing
+    if page == "📊 Dashboard":
+        show_dashboard(df)
+    elif page == "✅ Checklist":
+        show_checklist()
+    elif page == "📁 File Upload":
+        show_file_upload()
+    
+    # Footer
+    st.markdown("---")
+    st.markdown(f"""
+    <div style="text-align: center; padding: 30px; background: {IRONLADY_COLORS['accent']}; border-radius: 12px; border-top: 4px solid {IRONLADY_COLORS['primary']};">
+        <p style="margin: 0; font-weight: 900; font-size: 1.8rem; color: {IRONLADY_COLORS['secondary']};">IRON LADY</p>
+        <p style="margin: 10px 0 0 0; font-size: 0.9rem; opacity: 0.7;">© 2024 Iron Lady. All rights reserved.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()

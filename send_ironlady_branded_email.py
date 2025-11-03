@@ -9,7 +9,6 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
-from email.utils import formataddr
 from datetime import datetime, timedelta
 import os
 import json
@@ -458,10 +457,6 @@ def generate_email_html(report_data=None, ocr_results=None):
     
     return html
 
-def check_email_size(message):
-    email_size_mb = len(message.as_string().encode('utf-8')) / (1024 * 1024)
-    return email_size_mb, email_size_mb < MAX_EMAIL_SIZE_MB
-
 def send_daily_email(report_data=None, ocr_results=None):
     sender_email = os.environ.get('GMAIL_USER')
     sender_password = os.environ.get('GMAIL_APP_PASSWORD')
@@ -474,39 +469,17 @@ def send_daily_email(report_data=None, ocr_results=None):
     
     message = MIMEMultipart("alternative")
     message["Subject"] = f"Iron Lady Daily Report | {datetime.now().strftime('%B %d, %Y')} - Performance Summary"
-    message["From"] = formataddr(("Iron Lady Sales Tracker", sender_email))
+    message["From"] = sender_email
     message["To"] = recipient_email
-    message["Reply-To"] = sender_email
     
     html_content = generate_email_html(report_data, ocr_results)
     html_part = MIMEText(html_content, "html")
     message.attach(html_part)
     
-    email_size_mb, is_within_limit = check_email_size(message)
-    
-    if not is_within_limit:
-        print(f"⚠️ Email size ({email_size_mb:.2f}MB) exceeds {MAX_EMAIL_SIZE_MB}MB limit. Truncating content...")
-        html_content = generate_email_html(report_data, ocr_results=None)
-        
-        truncation_warning = f"""
-        <div style="background: {IRONLADY_COLORS['warning']}; color: white; padding: 20px; border-radius: 0px; margin: 20px 0; text-align: center; font-weight: 700;">
-            <p style="margin: 0; font-weight: 900; font-size: 1.1rem; text-transform: uppercase;">⚠️ CONTENT NOTICE</p>
-            <p style="margin: 10px 0 0 0; font-weight: 600;">
-                OCR analysis results were too large for email delivery. 
-                Please access the full dashboard for complete AI analysis and document insights.
-            </p>
-        </div>
-        """
-        html_content = html_content.replace('</body>', truncation_warning + '</body>')
-        
-        html_part = MIMEText(html_content, "html")
-        message = MIMEMultipart("alternative")
-        message["Subject"] = f"Iron Lady Daily Report | {datetime.now().strftime('%B %d, %Y')} - Performance Summary"
-        message["From"] = formataddr(("Iron Lady Sales Tracker", sender_email))
-        message["To"] = recipient_email
-        message.attach(html_part)
-    
     try:
+        email_size = len(message.as_string())
+        email_size_mb = email_size / (1024 * 1024)
+        
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, recipient_email, message.as_string())

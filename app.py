@@ -1,7 +1,6 @@
 """
-IRON LADY SALES TRACKER - COMPLETE INTEGRATED VERSION
-Dashboard with Manual RM Data Entry, Google Sheets Viewer & Official Branding
-Team Leaders: Ghazala, Megha, Afreen (Trainee), Soumya (Trainee)
+IRON LADY SALES TRACKER - FINAL PROFESSIONAL VERSION
+Complete Dashboard with Manual RM Data Entry, Google Sheets Viewer & Official Branding
 """
 
 import streamlit as st
@@ -45,24 +44,18 @@ except ImportError:
 # ============================================
 
 IRONLADY_COLORS = {
-    'primary': '#E63946',
-    'secondary': '#1A1A1A',
-    'accent': '#F5E6D3',
-    'success': '#2A9D8F',
-    'warning': '#F77F00',
-    'danger': '#D62828',
-    'light': '#FAF3E0',
-    'dark': '#1A1A1A',
+    'primary': '#E63946',      # Iron Lady Red (main brand color)
+    'secondary': '#1A1A1A',    # Black (text and icons)
+    'accent': '#F5E6D3',       # Beige/Cream (background)
+    'success': '#2A9D8F',      # Teal Green
+    'warning': '#F77F00',      # Orange
+    'danger': '#D62828',       # Dark Red
+    'light': '#FAF3E0',        # Light Cream
+    'dark': '#1A1A1A',         # Black
     'white': '#FFFFFF',
     'gradient_start': '#E63946',
     'gradient_end': '#D62828'
 }
-
-# ============================================
-# TEAM LEADERS
-# ============================================
-
-DEFAULT_TEAM_LEADERS = ['Ghazala', 'Megha', 'Afreen', 'Soumya']
 
 # ============================================
 # PAGE CONFIG & SETUP
@@ -75,15 +68,18 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Official Iron Lady Custom CSS (COMPLETE)
+# Official Iron Lady Custom CSS
 st.markdown(f"""
 <style>
+    /* Import Professional Font */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap');
     
+    /* Global Styles */
     * {{
         font-family: 'Inter', sans-serif;
     }}
     
+    /* Main Header */
     .main-header {{
         font-size: 2.5rem;
         font-weight: 900;
@@ -102,6 +98,7 @@ st.markdown(f"""
         font-weight: 400;
     }}
     
+    /* Iron Lady Logo Container */
     .logo-container {{
         text-align: center;
         padding: 30px 20px;
@@ -129,6 +126,7 @@ st.markdown(f"""
         font-weight: 400;
     }}
     
+    /* Cards */
     .metric-card {{
         background: white;
         padding: 20px;
@@ -143,6 +141,7 @@ st.markdown(f"""
         box-shadow: 0 4px 12px rgba(230, 57, 70, 0.2);
     }}
     
+    /* Data Entry Card */
     .data-entry-card {{
         background: white;
         padding: 25px;
@@ -152,6 +151,7 @@ st.markdown(f"""
         margin: 20px 0;
     }}
     
+    /* Login Cards */
     .login-card {{
         background: white;
         padding: 25px;
@@ -167,6 +167,7 @@ st.markdown(f"""
         box-shadow: 0 6px 16px rgba(230, 57, 70, 0.2);
     }}
     
+    /* Success/Error Messages */
     .success-msg {{ 
         background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
         color: {IRONLADY_COLORS['success']}; 
@@ -207,6 +208,7 @@ st.markdown(f"""
         font-weight: 500;
     }}
     
+    /* Input Fields */
     .stNumberInput > div > div > input {{
         border: 2px solid {IRONLADY_COLORS['accent']};
         border-radius: 0px;
@@ -233,6 +235,7 @@ st.markdown(f"""
         box-shadow: 0 0 0 2px rgba(230, 57, 70, 0.1);
     }}
     
+    /* Checklist Items */
     .checklist-item {{
         background: white;
         padding: 15px 20px;
@@ -253,6 +256,7 @@ st.markdown(f"""
         border-left-color: {IRONLADY_COLORS['success']};
     }}
     
+    /* Badges */
     .badge {{
         display: inline-block;
         padding: 5px 14px;
@@ -283,6 +287,7 @@ st.markdown(f"""
         color: white;
     }}
     
+    /* Status Badges */
     .status-excellent {{
         background: {IRONLADY_COLORS['success']};
         color: white;
@@ -310,6 +315,7 @@ st.markdown(f"""
         font-size: 0.85rem;
     }}
     
+    /* Sidebar Styling */
     [data-testid="stSidebar"] {{
         background: linear-gradient(180deg, {IRONLADY_COLORS['dark']} 0%, {IRONLADY_COLORS['secondary']} 100%);
     }}
@@ -318,10 +324,12 @@ st.markdown(f"""
         color: white !important;
     }}
     
+    /* Progress Bar */
     .stProgress > div > div > div {{
         background: {IRONLADY_COLORS['primary']};
     }}
     
+    /* Buttons */
     .stButton > button {{
         background: {IRONLADY_COLORS['primary']};
         color: white;
@@ -341,6 +349,7 @@ st.markdown(f"""
         transform: translateY(-2px);
     }}
     
+    /* Tables */
     .dataframe {{
         border: none !important;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -360,6 +369,7 @@ st.markdown(f"""
         background-color: {IRONLADY_COLORS['light']} !important;
     }}
     
+    /* Section Headers */
     h2, h3 {{
         color: {IRONLADY_COLORS['dark']};
         font-weight: 900;
@@ -370,6 +380,7 @@ st.markdown(f"""
         letter-spacing: 1px;
     }}
     
+    /* Divider */
     hr {{
         border: none;
         height: 3px;
@@ -377,6 +388,7 @@ st.markdown(f"""
         margin: 30px 0;
     }}
     
+    /* Tab Styling */
     .stTabs [data-baseweb="tab-list"] {{
         gap: 0px;
         background-color: {IRONLADY_COLORS['light']};
@@ -401,6 +413,7 @@ st.markdown(f"""
         border-color: {IRONLADY_COLORS['primary']};
     }}
     
+    /* File Uploader */
     .stFileUploader {{
         border: 2px dashed {IRONLADY_COLORS['primary']};
         border-radius: 0px;
@@ -408,6 +421,7 @@ st.markdown(f"""
         background: {IRONLADY_COLORS['light']};
     }}
     
+    /* Expander */
     .streamlit-expanderHeader {{
         background: {IRONLADY_COLORS['light']};
         border-radius: 0px;
@@ -415,6 +429,7 @@ st.markdown(f"""
         color: {IRONLADY_COLORS['dark']};
     }}
     
+    /* Footer */
     .footer {{
         text-align: center;
         padding: 20px;
@@ -424,6 +439,19 @@ st.markdown(f"""
         border-top: 3px solid {IRONLADY_COLORS['primary']};
         background: {IRONLADY_COLORS['accent']};
     }}
+    
+    /* Code Box */
+    .code-box {{
+        background: #f5f5f5;
+        padding: 15px;
+        border-radius: 5px;
+        border-left: 4px solid {IRONLADY_COLORS['primary']};
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        margin: 10px 0;
+        overflow-x: auto;
+        color: {IRONLADY_COLORS['dark']};
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -432,11 +460,12 @@ st.markdown(f"""
 # ============================================
 
 if 'team_leads' not in st.session_state:
-    st.session_state.team_leads = DEFAULT_TEAM_LEADERS.copy()
+    st.session_state.team_leads = ['Ghazala', 'Megha', 'Afreen', 'Soumya']
 
 if 'user' not in st.session_state:
     st.session_state.user = None
 
+# Initialize RM data for each team lead with proper structure
 if 'rm_data_by_lead' not in st.session_state:
     st.session_state.rm_data_by_lead = {}
 
@@ -452,68 +481,129 @@ if 'selected_day' not in st.session_state:
 if 'selected_date' not in st.session_state:
     st.session_state.selected_date = datetime.now().date()
 
-if 'use_google_sheets' not in st.session_state:
-    st.session_state.use_google_sheets = False
-
 if 'loaded_sheet_data' not in st.session_state:
     st.session_state.loaded_sheet_data = None
 
+if 'service_account_email' not in st.session_state:
+    st.session_state.service_account_email = None
+
 # ============================================
-# GOOGLE SHEETS INTEGRATION
+# GOOGLE SHEETS INTEGRATION - FIXED & DEBUG
 # ============================================
 
-@st.cache_resource
+def get_service_account_email():
+    """Extract service account email from secrets"""
+    try:
+        if "gcp_service_account" in st.secrets:
+            return st.secrets["gcp_service_account"].get("client_email", "Not found in secrets")
+        return "⚠️ Not configured in secrets.toml"
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
+
 def connect_to_google_sheets():
-    """Connect to Google Sheets"""
+    """Connect to Google Sheets - FIXED VERSION"""
     if not GSHEETS_AVAILABLE:
+        st.error("❌ Google Sheets libraries not installed")
+        st.code("pip install gspread google-auth")
         return None
     
     try:
+        # Check if secrets exist
         if "gcp_service_account" not in st.secrets:
+            st.error("❌ Google service account credentials not found in Streamlit secrets")
+            st.info("💡 Add your service account JSON to .streamlit/secrets.toml")
             return None
         
-        credentials_dict = st.secrets["gcp_service_account"]
+        credentials_dict = dict(st.secrets["gcp_service_account"])
+        
+        # Store service account email
+        st.session_state.service_account_email = credentials_dict.get("client_email", "Unknown")
+        
         credentials = Credentials.from_service_account_info(
             credentials_dict,
             scopes=[
-                'https://www.googleapis.com/auth/spreadsheets.readonly',
-                'https://www.googleapis.com/auth/drive.readonly'
+                'https://www.googleapis.com/auth/spreadsheets',
+                'https://www.googleapis.com/auth/drive'
             ]
         )
+        
         client = gspread.authorize(credentials)
         return client
+        
     except Exception as e:
-        st.error(f"❌ Google Sheets connection error: {e}")
+        st.error(f"❌ Connection error: {str(e)}")
         return None
 
-def fetch_sheet_data(sheet_id):
-    """Fetch data from Google Sheets - NO CACHE for real-time updates"""
+def fetch_sheet_data_with_debug(sheet_id):
+    """Fetch data from Google Sheets with detailed debugging"""
     if not GSHEETS_AVAILABLE:
+        st.error("❌ Google Sheets not available. Install: pip install gspread google-auth")
         return None
     
     try:
+        st.info("🔄 Step 1: Connecting to Google Sheets API...")
         client = connect_to_google_sheets()
+        
         if not client:
+            st.error("❌ Failed to connect to Google Sheets")
             return None
         
+        st.success("✅ Step 1 Complete: Connected to Google Sheets API")
+        
+        # Extract Sheet ID from URL if needed
         if 'docs.google.com' in sheet_id:
             sheet_id = sheet_id.split('/d/')[1].split('/')[0]
+            st.info(f"📋 Extracted Sheet ID: {sheet_id}")
         
+        st.info(f"🔄 Step 2: Opening spreadsheet with ID: {sheet_id}")
         spreadsheet = client.open_by_key(sheet_id)
-        data = {}
+        
+        st.success(f"✅ Step 2 Complete: Opened spreadsheet: **{spreadsheet.title}**")
+        
+        # Get all worksheets
+        st.info("🔄 Step 3: Fetching worksheets...")
         worksheets = spreadsheet.worksheets()
+        st.success(f"✅ Step 3 Complete: Found {len(worksheets)} worksheet(s)")
         
-        for worksheet in worksheets:
+        data = {}
+        
+        for idx, worksheet in enumerate(worksheets):
             sheet_name = worksheet.title
-            records = worksheet.get_all_records()
-            if records:
-                df = pd.DataFrame(records)
-                data[sheet_name] = df
+            st.info(f"🔄 Step {4+idx}: Reading sheet: **{sheet_name}**")
+            
+            try:
+                records = worksheet.get_all_records()
+                
+                if records:
+                    df = pd.DataFrame(records)
+                    data[sheet_name] = df
+                    st.success(f"✅ Step {4+idx} Complete: Loaded {len(df)} rows, {len(df.columns)} columns from **{sheet_name}**")
+                    
+                    # Show columns found
+                    st.info(f"📋 Columns in {sheet_name}: {', '.join(df.columns.tolist())}")
+                else:
+                    st.warning(f"⚠️ No data found in **{sheet_name}**")
+                    
+            except Exception as e:
+                st.error(f"❌ Error reading {sheet_name}: {str(e)}")
         
-        return data
+        if data:
+            st.success(f"🎉 **SUCCESS!** Loaded {len(data)} sheet(s) with data!")
+            return data
+        else:
+            st.warning("⚠️ No data found in any sheets")
+            return None
+        
+    except gspread.exceptions.APIError as e:
+        st.error(f"❌ **Google API Error:** {str(e)}")
+        st.error("💡 **Solution:** Make sure you've shared the sheet with your service account email (shown above)")
+        return None
         
     except Exception as e:
-        st.error(f"❌ Error: {e}")
+        st.error(f"❌ **Unexpected error:** {str(e)}")
+        st.error(f"**Error type:** {type(e).__name__}")
+        import traceback
+        st.code(traceback.format_exc())
         return None
 
 def parse_google_sheets_data(sheet_data):
@@ -524,6 +614,10 @@ def parse_google_sheets_data(sheet_data):
     parsed_data = {}
     
     for sheet_name, df in sheet_data.items():
+        st.info(f"🔍 Parsing sheet: **{sheet_name}**")
+        st.write(f"**Columns found:** {df.columns.tolist()}")
+        
+        # Find name column
         name_col = None
         for col in df.columns:
             col_upper = str(col).upper()
@@ -532,7 +626,10 @@ def parse_google_sheets_data(sheet_data):
                 break
         
         if not name_col:
+            st.warning(f"⚠️ No name column found in {sheet_name}. Looking for columns with: RM, NAME, TEAM, LEADER, TL")
             continue
+        
+        st.success(f"✅ Using column: **{name_col}**")
         
         for _, row in df.iterrows():
             name = str(row.get(name_col, '')).strip()
@@ -551,36 +648,45 @@ def parse_google_sheets_data(sheet_data):
                     'Actual_Registration': 0
                 }
                 
+                # Try multiple column name variations
                 for col_variations, key in [
-                    (['Total RMs', 'RMs', 'RM Count'], 'Total_RMs'),
-                    (['Lead Count', 'Leads', 'Total Leads'], 'Lead_Count'),
-                    (['Target Pitch', 'Pitch Target'], 'Target_Pitch'),
-                    (['Actual Pitch', 'Pitches'], 'Actual_Pitch'),
-                    (['Target Registration', 'Target Reg'], 'Target_Registration'),
-                    (['Actual Registration', 'Actual Reg', 'Registrations'], 'Actual_Registration'),
+                    (['Total RMs', 'RMs', 'RM Count', 'Total_RMs', 'total_rms'], 'Total_RMs'),
+                    (['Lead Count', 'Leads', 'Total Leads', 'Lead_Count', 'lead_count'], 'Lead_Count'),
+                    (['Target Pitch', 'Pitch Target', 'Target_Pitch', 'target_pitch'], 'Target_Pitch'),
+                    (['Actual Pitch', 'Pitches', 'Actual_Pitch', 'actual_pitch'], 'Actual_Pitch'),
+                    (['Target Registration', 'Target Reg', 'Target_Registration', 'target_registration'], 'Target_Registration'),
+                    (['Actual Registration', 'Actual Reg', 'Registrations', 'Actual_Registration', 'actual_registration'], 'Actual_Registration'),
                 ]:
                     for col_name in col_variations:
                         if col_name in df.columns:
                             val = row.get(col_name, 0)
                             if pd.notna(val):
-                                entry[key] = int(val)
+                                try:
+                                    entry[key] = int(val)
+                                except:
+                                    entry[key] = 0
                                 break
                 
                 parsed_data[name].append(entry)
-    
+        
     result = {}
     for name, entries in parsed_data.items():
         result[name] = pd.DataFrame(entries)
+        st.success(f"✅ Parsed {len(entries)} entries for: **{name}**")
+    
+    if not result:
+        st.warning(f"⚠️ No data found for team leaders: {', '.join(st.session_state.team_leads)}")
     
     return result if result else None
 
 # ============================================
-# LOGIN SECTION (COMPLETE)
+# LOGIN SECTION
 # ============================================
 
 def show_login_page():
     """Display official Iron Lady branded login page"""
     
+    # Logo/Branding Section
     st.markdown(f"""
     <div class="logo-container">
         <h1 class="logo-text">IRON LADY</h1>
@@ -596,6 +702,7 @@ def show_login_page():
         
         st.markdown("### 👥 TEAM LEADERS")
         
+        # Display existing team leads in a grid
         cols = st.columns(2)
         for idx, lead in enumerate(st.session_state.team_leads):
             role = "Senior TL" if lead in ['Ghazala', 'Megha'] else "TL Trainee"
@@ -605,6 +712,7 @@ def show_login_page():
                 if st.button(f"{icon} {lead} ({role})", key=f"login_{idx}", use_container_width=True):
                     st.session_state.user = lead
                     st.session_state.checklist = {}
+                    # Initialize RM data for this user if not exists
                     if lead not in st.session_state.rm_data_by_lead:
                         st.session_state.rm_data_by_lead[lead] = pd.DataFrame({
                             'RM_Name': [''],
@@ -619,6 +727,7 @@ def show_login_page():
         
         st.markdown("---")
         
+        # Add new team lead option
         with st.expander("➕ ADD NEW TEAM LEADER"):
             new_lead_name = st.text_input("Enter team leader name:", key="new_lead_input", placeholder="e.g., John Smith")
             
@@ -631,6 +740,7 @@ def show_login_page():
                             st.session_state.team_leads.append(new_name)
                             st.session_state.user = new_name
                             st.session_state.checklist = {}
+                            # Initialize RM data for new user
                             st.session_state.rm_data_by_lead[new_name] = pd.DataFrame({
                                 'RM_Name': [''],
                                 'Total_RMs': [0],
@@ -653,6 +763,7 @@ def show_login_page():
                         new_name = new_lead_name.strip()
                         if new_name not in st.session_state.team_leads:
                             st.session_state.team_leads.append(new_name)
+                            # Initialize RM data for new user
                             st.session_state.rm_data_by_lead[new_name] = pd.DataFrame({
                                 'RM_Name': [''],
                                 'Total_RMs': [0],
@@ -717,6 +828,7 @@ def calculate_metrics(df):
         'total_actual_reg': int(df['Actual_Registration'].sum()),
     }
     
+    # Calculate conversion rate
     if metrics['total_actual_pitch'] > 0:
         metrics['conversion_rate'] = round(
             (metrics['total_actual_reg'] / metrics['total_actual_pitch']) * 100, 1
@@ -724,6 +836,7 @@ def calculate_metrics(df):
     else:
         metrics['conversion_rate'] = 0
     
+    # Calculate achievements
     if metrics['total_target_pitch'] > 0:
         metrics['pitch_achievement'] = round(
             (metrics['total_actual_pitch'] / metrics['total_target_pitch']) * 100, 1
@@ -750,7 +863,7 @@ def get_status_badge(conversion_rate):
         return '<span class="status-poor">❌ NEEDS IMPROVEMENT</span>'
 
 # ============================================
-# DATA ENTRY INTERFACE (COMPLETE FROM ORIGINAL)
+# DATA ENTRY INTERFACE
 # ============================================
 
 def show_data_entry_interface():
@@ -761,6 +874,7 @@ def show_data_entry_interface():
     
     current_data = get_current_user_data()
     
+    # Add new entry form
     with st.expander("➕ ADD NEW RM ENTRY", expanded=True):
         st.markdown("#### Enter RM Performance Data")
         
@@ -833,6 +947,7 @@ def show_data_entry_interface():
         with col_btn1:
             if st.button("✅ ADD ENTRY", use_container_width=True, key="add_rm_entry"):
                 if rm_name and rm_name.strip():
+                    # Check if entry already exists
                     if rm_name in current_data['RM_Name'].values:
                         st.markdown('<div class="warning-msg">⚠️ Entry with this name already exists! Use UPDATE instead.</div>', unsafe_allow_html=True)
                     else:
@@ -846,6 +961,7 @@ def show_data_entry_interface():
                             'Actual_Registration': [actual_reg]
                         })
                         
+                        # Remove empty rows before adding
                         current_data = current_data[current_data['RM_Name'] != '']
                         updated_data = pd.concat([current_data, new_row], ignore_index=True)
                         update_current_user_data(updated_data)
@@ -859,18 +975,21 @@ def show_data_entry_interface():
             if st.button("🔄 CLEAR FORM", use_container_width=True, key="clear_form"):
                 st.rerun()
     
+    # Display existing entries
     st.markdown("---")
     st.markdown("### 📊 CURRENT ENTRIES")
     
     display_data = current_data[current_data['RM_Name'] != ''].copy()
     
     if len(display_data) > 0:
+        # Calculate conversion rate for display
         display_data['Conversion %'] = display_data.apply(
             lambda row: round((row['Actual_Registration'] / row['Actual_Pitch'] * 100), 1) 
             if row['Actual_Pitch'] > 0 else 0,
             axis=1
         )
         
+        # Display as editable dataframe
         st.dataframe(
             display_data[['RM_Name', 'Total_RMs', 'Lead_Count', 'Target_Pitch', 
                          'Actual_Pitch', 'Target_Registration', 'Actual_Registration', 'Conversion %']],
@@ -878,6 +997,7 @@ def show_data_entry_interface():
             hide_index=True
         )
         
+        # Edit and Delete options
         st.markdown("#### ⚙️ MANAGE ENTRIES")
         
         col1, col2 = st.columns([2, 1])
@@ -896,6 +1016,7 @@ def show_data_entry_interface():
                 st.markdown(f'<div class="success-msg">✅ Deleted entry for {selected_rm}</div>', unsafe_allow_html=True)
                 st.rerun()
         
+        # Quick summary
         metrics = calculate_metrics(display_data)
         
         st.markdown("---")
@@ -905,10 +1026,13 @@ def show_data_entry_interface():
         
         with col1:
             st.metric("Total RMs", metrics['total_rms'])
+        
         with col2:
             st.metric("Total Leads", metrics['total_leads'])
+        
         with col3:
             st.metric("Pitches", f"{metrics['total_actual_pitch']}/{metrics['total_target_pitch']}")
+        
         with col4:
             st.metric("Registrations", f"{metrics['total_actual_reg']}/{metrics['total_target_reg']}")
     
@@ -916,28 +1040,77 @@ def show_data_entry_interface():
         st.markdown('<div class="info-msg">📊 No entries yet. Add your first RM entry above to get started!</div>', unsafe_allow_html=True)
 
 # ============================================
-# GOOGLE SHEETS VIEWER TAB (NEW)
+# GOOGLE SHEETS VIEWER - COMPLETE WITH DEBUG
 # ============================================
 
 def show_google_sheets_viewer():
-    """Display Google Sheets data viewer"""
+    """Display Google Sheets data viewer with full debugging"""
     st.markdown("### 📊 GOOGLE SHEETS VIEWER & IMPORTER")
     
     if not GSHEETS_AVAILABLE:
-        st.markdown('<div class="error-msg">❌ <strong>Google Sheets library not installed.</strong><br/>Install with: <code>pip install gspread google-auth</code></div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="error-msg">
+            <strong>❌ Google Sheets library not installed</strong><br/>
+            Install with: <code>pip install gspread google-auth</code>
+        </div>
+        """, unsafe_allow_html=True)
         return
     
-    st.markdown('<div class="info-msg">📈 <strong>View and import data directly from your Google Sheets.</strong> Load any Google Sheet to view its contents and import data to your dashboard.</div>', unsafe_allow_html=True)
+    # Get and display service account email
+    service_email = get_service_account_email()
+    
+    st.markdown(f"""
+    <div class="info-msg">
+        <strong>📧 YOUR SERVICE ACCOUNT EMAIL:</strong><br/>
+        <div class="code-box">{service_email}</div>
+        <strong>⚠️ CRITICAL: You MUST share your Google Sheet with this email!</strong>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Configuration section
-    with st.expander("⚙️ CONFIGURE & LOAD GOOGLE SHEETS", expanded=True):
-        st.markdown("#### 🔗 Enter Your Google Sheet Details")
+    with st.expander("⚙️ STEP 1: CONFIGURE & LOAD GOOGLE SHEETS", expanded=True):
+        st.markdown("#### 📋 Enter Your Google Sheet Details")
         
         sheet_id_input = st.text_input(
-            "📋 Google Sheet ID or URL",
+            "Google Sheet ID or URL",
             placeholder="1abc123xyz... or https://docs.google.com/spreadsheets/d/...",
             help="Find the Sheet ID in your Google Sheets URL between '/d/' and '/edit'"
         )
+        
+        st.markdown("---")
+        st.markdown("### 📝 HOW TO SHARE YOUR SHEET")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("""
+            <div class="success-msg">
+            <strong>✅ Option 1: Share with Service Account (Required)</strong><br/><br/>
+            1. Open your Google Sheet<br/>
+            2. Click <strong>Share</strong> button (top right)<br/>
+            3. Paste the service account email shown above<br/>
+            4. Select <strong>Viewer</strong> access<br/>
+            5. Click <strong>Send</strong><br/>
+            6. <strong>Done!</strong> Now you can load the sheet
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown("""
+            <div class="warning-msg">
+            <strong>👥 Option 2: Share with Multiple People</strong><br/><br/>
+            <strong>Method A - Individual:</strong><br/>
+            • Add each person's email in Share dialog<br/>
+            • Give them "Viewer" or "Editor" access<br/><br/>
+            <strong>Method B - Link Sharing:</strong><br/>
+            1. Click "Change to anyone with the link"<br/>
+            2. Set to "Anyone with link can VIEW"<br/>
+            3. Share the link with your team<br/>
+            4. <strong>Still share with service account!</strong>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
         
         col1, col2 = st.columns(2)
         
@@ -945,38 +1118,36 @@ def show_google_sheets_viewer():
             if st.button("🔄 LOAD SHEET DATA", use_container_width=True, type="primary"):
                 if sheet_id_input:
                     with st.spinner("⏳ Loading data from Google Sheets..."):
-                        sheet_data = fetch_sheet_data(sheet_id_input)
+                        sheet_data = fetch_sheet_data_with_debug(sheet_id_input)
                         if sheet_data:
                             st.session_state.loaded_sheet_data = sheet_data
-                            st.markdown(f'<div class="success-msg">✅ <strong>Success!</strong> Loaded {len(sheet_data)} sheet(s) from Google Sheets</div>', unsafe_allow_html=True)
+                            st.balloons()
                             st.rerun()
-                        else:
-                            st.markdown('<div class="error-msg">❌ <strong>Failed to load sheet data.</strong> Make sure you\'ve shared the sheet with your service account email.</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown('<div class="warning-msg">⚠️ Please enter a Sheet ID or URL first</div>', unsafe_allow_html=True)
+                    st.error("❌ Please enter a Sheet ID or URL first")
         
         with col2:
             if st.button("📥 IMPORT TO MY DASHBOARD", use_container_width=True):
                 if st.session_state.loaded_sheet_data:
-                    parsed = parse_google_sheets_data(st.session_state.loaded_sheet_data)
-                    if parsed and st.session_state.user in parsed:
-                        st.session_state.rm_data_by_lead[st.session_state.user] = parsed[st.session_state.user]
-                        st.markdown(f'<div class="success-msg">✅ <strong>Data imported successfully!</strong> Your dashboard has been updated with the latest data.</div>', unsafe_allow_html=True)
-                        st.rerun()
-                    else:
-                        st.markdown(f'<div class="warning-msg">⚠️ No data found for user: <strong>{st.session_state.user}</strong></div>', unsafe_allow_html=True)
+                    with st.spinner("⏳ Parsing and importing data..."):
+                        parsed = parse_google_sheets_data(st.session_state.loaded_sheet_data)
+                        if parsed and st.session_state.user in parsed:
+                            st.session_state.rm_data_by_lead[st.session_state.user] = parsed[st.session_state.user]
+                            st.success(f"✅ Data imported successfully for {st.session_state.user}!")
+                            st.rerun()
+                        else:
+                            st.warning(f"⚠️ No data found for user: {st.session_state.user}")
+                            st.info(f"💡 Available users: {', '.join(st.session_state.team_leads)}")
                 else:
-                    st.markdown('<div class="warning-msg">⚠️ Please load sheet data first by clicking "Load Sheet Data"</div>', unsafe_allow_html=True)
+                    st.error("❌ Please load sheet data first by clicking 'Load Sheet Data'")
         
         st.markdown("---")
         
-        st.markdown("#### ℹ️ How to Share Your Google Sheet")
+        st.markdown("#### 💡 Expected Column Names")
         st.markdown("""
-        1. Open your Google Sheet
-        2. Click **Share** button (top right)
-        3. Add your service account email (found in your Streamlit secrets)
-        4. Give **Viewer** access
-        5. Copy the Sheet ID from the URL
+        Your Google Sheet should have these column names (case-insensitive):
+        - **Name column:** RM Name, Name, Team, Leader, TL
+        - **Metrics:** Total RMs, Lead Count, Target Pitch, Actual Pitch, Target Registration, Actual Registration
         """)
     
     st.markdown("---")
@@ -985,7 +1156,11 @@ def show_google_sheets_viewer():
     if st.session_state.loaded_sheet_data:
         st.markdown("### 📄 LOADED SHEET DATA")
         
-        st.markdown(f'<div class="success-msg">✅ Currently viewing <strong>{len(st.session_state.loaded_sheet_data)}</strong> sheet(s)</div>', unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="success-msg">
+            ✅ Currently viewing <strong>{len(st.session_state.loaded_sheet_data)}</strong> sheet(s)
+        </div>
+        """, unsafe_allow_html=True)
         
         # Show tabs for each sheet
         if len(st.session_state.loaded_sheet_data) > 0:
@@ -1014,11 +1189,7 @@ def show_google_sheets_viewer():
                     
                     # Show column info
                     st.markdown("#### 📋 Column Information")
-                    cols_display = st.columns(4)
-                    for idx, col in enumerate(df.columns):
-                        with cols_display[idx % 4]:
-                            st.markdown(f"**{col}**")
-                            st.caption(f"Type: {df[col].dtype}")
+                    st.markdown(f"**Columns:** {', '.join(df.columns.tolist())}")
         
         st.markdown("---")
         
@@ -1028,7 +1199,7 @@ def show_google_sheets_viewer():
         with col1:
             if st.button("🔄 REFRESH DATA", use_container_width=True, type="secondary"):
                 st.session_state.loaded_sheet_data = None
-                st.markdown('<div class="info-msg">🔄 Data cleared. Click "Load Sheet Data" to refresh from Google Sheets.</div>', unsafe_allow_html=True)
+                st.info("🔄 Data cleared. Click 'Load Sheet Data' to refresh from Google Sheets.")
                 st.rerun()
         
         with col2:
@@ -1037,40 +1208,51 @@ def show_google_sheets_viewer():
                     parsed = parse_google_sheets_data(st.session_state.loaded_sheet_data)
                     if parsed and st.session_state.user in parsed:
                         st.session_state.rm_data_by_lead[st.session_state.user] = parsed[st.session_state.user]
-                        st.markdown('<div class="success-msg">✅ Data re-imported to your dashboard!</div>', unsafe_allow_html=True)
+                        st.success("✅ Data re-imported to your dashboard!")
                         st.rerun()
     
     else:
-        st.markdown('<div class="info-msg">📊 <strong>No sheet data loaded yet.</strong><br/>Enter a Sheet ID above and click "Load Sheet Data" to get started.</div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="info-msg">
+            📊 <strong>No sheet data loaded yet.</strong><br/>
+            Enter a Sheet ID above and click "Load Sheet Data" to get started.
+        </div>
+        """, unsafe_allow_html=True)
         
         st.markdown("---")
         st.markdown("### 💡 Quick Start Guide")
+        
         st.markdown("""
         <div style="background: white; padding: 20px; border-left: 5px solid #E63946; margin: 20px 0;">
         <h4 style="margin-top: 0; border: none;">📝 Step-by-Step Instructions:</h4>
         
-        1. **Prepare Your Google Sheet**
-           - Make sure your sheet has columns like: RM Name, Total RMs, Lead Count, Target Pitch, Actual Pitch, etc.
-           
-        2. **Share Your Sheet**
-           - Share with your service account email (found in Streamlit secrets)
-           - Grant "Viewer" permission
-           
-        3. **Get Sheet ID**
-           - Copy from URL: `docs.google.com/spreadsheets/d/[THIS_IS_YOUR_ID]/edit`
-           
-        4. **Load Data**
-           - Paste the Sheet ID or full URL above
-           - Click "Load Sheet Data"
-           
-        5. **View & Import**
-           - Review the loaded data
-           - Click "Import to My Dashboard" to use it
+        <strong>Step 1: Prepare Your Google Sheet</strong><br/>
+        • Make sure your sheet has columns like: RM Name, Total RMs, Lead Count, Target Pitch, Actual Pitch, Target Registration, Actual Registration<br/><br/>
+        
+        <strong>Step 2: Share Your Sheet</strong><br/>
+        • Open your Google Sheet<br/>
+        • Click the <strong>Share</strong> button<br/>
+        • Add the service account email shown above<br/>
+        • Give <strong>Viewer</strong> permission<br/>
+        • Click <strong>Send</strong><br/><br/>
+        
+        <strong>Step 3: Get Sheet ID</strong><br/>
+        • Copy from URL: <code>docs.google.com/spreadsheets/d/[THIS_IS_YOUR_ID]/edit</code><br/><br/>
+        
+        <strong>Step 4: Load Data</strong><br/>
+        • Paste the Sheet ID or full URL above<br/>
+        • Click "Load Sheet Data"<br/>
+        • Watch the detailed progress messages<br/><br/>
+        
+        <strong>Step 5: View & Import</strong><br/>
+        • Review the loaded data in the expandable sections<br/>
+        • Click "Import to My Dashboard" to use it<br/>
+        • Your data will appear in the DATA ENTRY and DASHBOARD tabs
         </div>
         """, unsafe_allow_html=True)
 
 # ============================================
-# CHECKLIST ITEMS (COMPLETE FROM ORIGINAL)
+# CHECKLIST ITEMS (COMPLETE)
 # ============================================
 
 CHECKLIST_ITEMS = {
@@ -1118,6 +1300,7 @@ def render_checklist_items(items, priority):
         item_type = item_dict.get('type', 'checkbox')
         required = item_dict.get('required', False)
         
+        # Determine badge
         badge_html = ""
         if item_type == 'upload':
             badge_html = '<span class="badge badge-upload">📤 UPLOAD</span>'
@@ -1128,6 +1311,7 @@ def render_checklist_items(items, priority):
         elif required:
             badge_html = '<span class="badge badge-required">⚠️ REQUIRED</span>'
         
+        # Check if completed
         is_completed = st.session_state.checklist.get(task, False)
         
         col1, col2 = st.columns([5, 1])
@@ -1145,10 +1329,11 @@ def render_checklist_items(items, priority):
                 st.markdown(badge_html, unsafe_allow_html=True)
 
 # ============================================
-# MAIN APP (COMPLETE WITH ALL TABS)
+# MAIN APP (COMPLETE)
 # ============================================
 
 def main():
+    # Login check
     if st.session_state.user is None:
         show_login_page()
         return
@@ -1220,7 +1405,7 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    # Tab structure - ADDED GOOGLE SHEETS TAB
+    # Tab structure - WITH GOOGLE SHEETS TAB
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📝 DATA ENTRY",
         "📊 PERFORMANCE DASHBOARD",
@@ -1230,14 +1415,14 @@ def main():
     ])
     
     # ============================================
-    # TAB 1: DATA ENTRY (COMPLETE FROM ORIGINAL)
+    # TAB 1: DATA ENTRY
     # ============================================
     
     with tab1:
         show_data_entry_interface()
     
     # ============================================
-    # TAB 2: DASHBOARD (COMPLETE FROM ORIGINAL)
+    # TAB 2: DASHBOARD
     # ============================================
     
     with tab2:
@@ -1303,6 +1488,7 @@ def main():
         col1, col2 = st.columns(2)
         
         with col1:
+            # RM-wise conversion rate
             chart_data = current_data[current_data['RM_Name'] != ''].copy()
             if len(chart_data) > 0:
                 chart_data['Conversion %'] = chart_data.apply(
@@ -1329,6 +1515,7 @@ def main():
                 st.plotly_chart(fig, use_container_width=True)
         
         with col2:
+            # Target vs Actual
             summary_df = pd.DataFrame({
                 'Metric': ['Pitch', 'Registration'],
                 'Target': [metrics['total_target_pitch'], metrics['total_target_reg']],
@@ -1373,14 +1560,14 @@ def main():
             st.markdown('<div class="info-msg">📊 No RM data available yet. Go to <strong>DATA ENTRY</strong> tab to add team data.</div>', unsafe_allow_html=True)
     
     # ============================================
-    # TAB 3: GOOGLE SHEETS VIEWER (NEW)
+    # TAB 3: GOOGLE SHEETS VIEWER
     # ============================================
     
     with tab3:
         show_google_sheets_viewer()
     
     # ============================================
-    # TAB 4: FILE UPLOAD (COMPLETE FROM ORIGINAL)
+    # TAB 4: FILE UPLOAD
     # ============================================
     
     with tab4:
@@ -1429,12 +1616,12 @@ def main():
                 
                 if uploaded_files:
                     for uploaded_file in uploaded_files:
-                        file_size = uploaded_file.size / 1024
+                        file_size = uploaded_file.size / 1024  # Convert to KB
                         st.markdown(f'<div class="success-msg">✅ <strong>{uploaded_file.name}</strong> ({file_size:.1f} KB) ready to upload</div>', unsafe_allow_html=True)
                         st.session_state.files_uploaded[file_info['key']] = uploaded_file.name
     
     # ============================================
-    # TAB 5: CHECKLIST (COMPLETE FROM ORIGINAL)
+    # TAB 5: CHECKLIST
     # ============================================
     
     with tab5:
@@ -1442,24 +1629,29 @@ def main():
         
         selected_checklist = CHECKLIST_ITEMS.get(st.session_state.selected_day, [])
         
+        # Show time if available
         if selected_checklist and selected_checklist[0].get('time'):
             st.markdown(f'<div class="info-msg">⏰ <strong>Session Time:</strong> {selected_checklist[0]["time"]}</div>', unsafe_allow_html=True)
         
         st.markdown("---")
         
+        # Group by priority
         high_priority = [item for item in selected_checklist if item.get('priority') == 'high']
         medium_priority = [item for item in selected_checklist if item.get('priority') == 'medium']
         low_priority = [item for item in selected_checklist if item.get('priority') not in ['high', 'medium']]
         
+        # High Priority Tasks
         if high_priority:
             st.markdown(f"#### 🔴 HIGH PRIORITY TASKS")
             render_checklist_items(high_priority, 'high')
         
+        # Medium Priority Tasks
         if medium_priority:
             st.markdown("---")
             st.markdown(f"#### 🟡 MEDIUM PRIORITY TASKS")
             render_checklist_items(medium_priority, 'medium')
         
+        # Low Priority Tasks
         if low_priority:
             st.markdown("---")
             st.markdown(f"#### 🟢 STANDARD TASKS")
@@ -1467,10 +1659,12 @@ def main():
         
         st.markdown("---")
         
+        # Calculate progress
         task_names = [item['task'] for item in selected_checklist]
         checked_count = sum(1 for task in task_names if st.session_state.checklist.get(task, False))
         progress = checked_count / len(task_names) * 100 if task_names else 0
         
+        # Progress bar with custom styling
         st.markdown(f"""
         <div style="background: {IRONLADY_COLORS['light']}; padding: 20px; border-radius: 0px; margin: 20px 0; border-left: 5px solid {IRONLADY_COLORS['primary']};">
             <h4 style="color: {IRONLADY_COLORS['primary']}; margin: 0 0 10px 0; font-weight: 900; text-transform: uppercase;">OVERALL PROGRESS</h4>
@@ -1480,6 +1674,7 @@ def main():
         
         st.markdown("</div>", unsafe_allow_html=True)
         
+        # Summary metrics
         col1, col2, col3 = st.columns(3)
         
         with col1:
@@ -1501,7 +1696,7 @@ def main():
     <div class="footer">
         <p style="font-weight: 900; text-transform: uppercase; letter-spacing: 2px; font-size: 1.1rem; color: {IRONLADY_COLORS['primary']};">IRON LADY SALES TRACKER</p>
         <p style="font-weight: 600;">Team: Ghazala 🏆 | Megha 🏆 | Afreen 🌟 | Soumya 🌟</p>
-        <p style="font-weight: 600;">Official Branded Edition with Manual Data Entry + Google Sheets Viewer | v5.0</p>
+        <p style="font-weight: 600;">Official Edition with Google Sheets Integration & Debug Mode | v6.0</p>
         <p style="font-size: 0.75rem; opacity: 0.7; margin-top: 10px;">© 2024 Iron Lady. All rights reserved. | Last updated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</p>
     </div>
     """, unsafe_allow_html=True)

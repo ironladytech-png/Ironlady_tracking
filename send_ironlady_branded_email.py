@@ -9,6 +9,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
+from email.utils import formataddr
 from datetime import datetime, timedelta
 import os
 import json
@@ -19,31 +20,28 @@ import pandas as pd
 # ============================================
 
 IRONLADY_COLORS = {
-    'primary': '#E63946',      # Iron Lady Red (main brand color)
-    'secondary': '#1A1A1A',    # Black (text and icons)
-    'accent': '#F5E6D3',       # Beige/Cream (background)
-    'success': '#2A9D8F',      # Teal Green
-    'warning': '#F77F00',      # Orange
-    'danger': '#D62828',       # Dark Red
-    'light': '#FAF3E0',        # Light Cream
-    'dark': '#1A1A1A',         # Black
+    'primary': '#E63946',
+    'secondary': '#1A1A1A',
+    'accent': '#F5E6D3',
+    'success': '#2A9D8F',
+    'warning': '#F77F00',
+    'danger': '#D62828',
+    'light': '#FAF3E0',
+    'dark': '#1A1A1A',
 }
 
-# Email configuration
-MAX_EMAIL_SIZE_MB = 20  # Gmail limit is 25MB, keep buffer
+MAX_EMAIL_SIZE_MB = 20
 
 # ============================================
 # UTILITY FUNCTIONS
 # ============================================
 
 def truncate_text(text, max_chars=5000):
-    """Truncate text to fit email size limits"""
     if len(text) <= max_chars:
         return text
     return text[:max_chars] + "\n\n... (content truncated for email size limit)"
 
 def get_performance_status(percentage):
-    """Get performance status and color based on percentage"""
     if percentage >= 90:
         return "Excellent", IRONLADY_COLORS['success'], "🎯"
     elif percentage >= 75:
@@ -54,7 +52,6 @@ def get_performance_status(percentage):
         return "Needs Attention", IRONLADY_COLORS['danger'], "❌"
 
 def generate_ocr_summary_html(ocr_results):
-    """Generate professional HTML for OCR analysis results"""
     if not ocr_results:
         return ""
     
@@ -84,10 +81,9 @@ def generate_ocr_summary_html(ocr_results):
     </div>
     """
     
-    # Add details for each file (limit to prevent email size issues)
     file_count = 0
     for file_key, data in ocr_results.items():
-        if file_count >= 5:  # Limit to 5 files in email
+        if file_count >= 5:
             html += f"""
             <div style="background: {IRONLADY_COLORS['light']}; padding: 15px; border-radius: 0px; text-align: center; margin: 15px 0;">
                 <p style="margin: 0; color: {IRONLADY_COLORS['dark']}; font-style: italic;">
@@ -107,7 +103,6 @@ def generate_ocr_summary_html(ocr_results):
             <h4 style="color: {IRONLADY_COLORS['primary']}; margin: 0 0 15px 0; font-weight: 700; text-transform: uppercase;">📄 {file_name}</h4>
         """
         
-        # Add extracted text (truncated)
         if text:
             truncated_text = truncate_text(text, 500)
             html += f"""
@@ -117,7 +112,6 @@ def generate_ocr_summary_html(ocr_results):
             </div>
             """
         
-        # Add entities
         if 'error' not in entities:
             has_entities = any(entities.values())
             if has_entities:
@@ -132,7 +126,6 @@ def generate_ocr_summary_html(ocr_results):
                         html += f"<li><strong>{entity_type}:</strong> {', '.join(unique_values)}</li>"
                 html += "</ul></div>"
         
-        # Add metrics
         if metrics:
             html += f"""
             <div style="margin: 15px 0;">
@@ -154,7 +147,6 @@ def generate_ocr_summary_html(ocr_results):
     return html
 
 def generate_team_lead_table(team_data):
-    """Generate professional table for team lead performance"""
     if not team_data:
         return ""
     
@@ -174,10 +166,7 @@ def generate_team_lead_table(team_data):
     """
     
     for idx, lead in enumerate(team_data):
-        # Alternate row colors
         bg_color = IRONLADY_COLORS['light'] if idx % 2 == 0 else 'white'
-        
-        # Determine status
         conversion = float(lead.get('conversion', 0))
         status_text, status_color, status_icon = get_performance_status(conversion)
         
@@ -210,7 +199,6 @@ def generate_team_lead_table(team_data):
     return html
 
 def generate_checklist_html(checklist_data):
-    """Generate professional checklist section"""
     if not checklist_data:
         return ""
     
@@ -245,7 +233,6 @@ def generate_checklist_html(checklist_data):
         is_completed = item.get('completed', False)
         priority = item.get('priority', 'medium')
         
-        # Set colors based on completion and priority
         if is_completed:
             bg_color = '#d4edda'
             border_color = IRONLADY_COLORS['success']
@@ -275,12 +262,10 @@ def generate_checklist_html(checklist_data):
     return html
 
 def generate_email_html(report_data=None, ocr_results=None):
-    """Generate Iron Lady branded HTML email report"""
     today = datetime.now()
     formatted_date = today.strftime('%A, %B %d, %Y')
     formatted_time = today.strftime('%I:%M %p IST')
     
-    # Default data if none provided
     if report_data is None:
         report_data = {
             'total_leads': 150,
@@ -306,7 +291,6 @@ def generate_email_html(report_data=None, ocr_results=None):
             ]
         }
     
-    # Get status for overall performance
     overall_status, overall_color, overall_icon = get_performance_status(report_data['conversion_rate'])
     
     html = f"""
@@ -329,7 +313,6 @@ def generate_email_html(report_data=None, ocr_results=None):
     <body>
         <div style="max-width: 800px; margin: 0 auto; background: {IRONLADY_COLORS['light']}; padding: 20px;">
             
-            <!-- Header with Iron Lady Branding -->
             <div style="background: {IRONLADY_COLORS['accent']}; padding: 40px 30px; border-radius: 0px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-bottom: 30px; border-top: 8px solid {IRONLADY_COLORS['primary']}; border-bottom: 8px solid {IRONLADY_COLORS['primary']};">
                 <h1 style="color: {IRONLADY_COLORS['dark']}; margin: 0; font-size: 3.5rem; font-weight: 900; letter-spacing: 3px; text-transform: uppercase;">
                     IRON LADY
@@ -346,16 +329,13 @@ def generate_email_html(report_data=None, ocr_results=None):
                 </p>
             </div>
             
-            <!-- Executive Summary -->
             <div style="background: white; padding: 30px; border-radius: 0px; margin-bottom: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-left: 6px solid {IRONLADY_COLORS['primary']};">
                 <h2 style="color: {IRONLADY_COLORS['dark']}; margin: 0 0 25px 0; font-size: 1.6rem; font-weight: 900; border-bottom: 3px solid {IRONLADY_COLORS['primary']}; padding-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">
                     📈 EXECUTIVE SUMMARY
                 </h2>
                 
-                <!-- Key Metrics Grid -->
                 <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 25px;">
                     
-                    <!-- Total Leads -->
                     <div style="background: {IRONLADY_COLORS['light']}; padding: 22px; border-radius: 0px; border-left: 6px solid {IRONLADY_COLORS['primary']};">
                         <p style="margin: 0; color: {IRONLADY_COLORS['dark']}; font-size: 0.9rem; font-weight: 600; text-transform: uppercase;">Total Leads</p>
                         <p style="margin: 12px 0 0 0; color: {IRONLADY_COLORS['primary']}; font-size: 2.8rem; font-weight: 900; line-height: 1;">
@@ -364,7 +344,6 @@ def generate_email_html(report_data=None, ocr_results=None):
                         <p style="margin: 5px 0 0 0; color: {IRONLADY_COLORS['dark']}; opacity: 0.6; font-size: 0.85rem;">Active Prospects</p>
                     </div>
                     
-                    <!-- Pitch Achievement -->
                     <div style="background: {IRONLADY_COLORS['light']}; padding: 22px; border-radius: 0px; border-left: 6px solid {IRONLADY_COLORS['success']};">
                         <p style="margin: 0; color: {IRONLADY_COLORS['dark']}; font-size: 0.9rem; font-weight: 600; text-transform: uppercase;">Pitch Achievement</p>
                         <p style="margin: 12px 0 0 0; color: {IRONLADY_COLORS['success']}; font-size: 2.8rem; font-weight: 900; line-height: 1;">
@@ -375,7 +354,6 @@ def generate_email_html(report_data=None, ocr_results=None):
                         </p>
                     </div>
                     
-                    <!-- Registration Achievement -->
                     <div style="background: {IRONLADY_COLORS['light']}; padding: 22px; border-radius: 0px; border-left: 6px solid {IRONLADY_COLORS['warning']};">
                         <p style="margin: 0; color: {IRONLADY_COLORS['dark']}; font-size: 0.9rem; font-weight: 600; text-transform: uppercase;">Registration Achievement</p>
                         <p style="margin: 12px 0 0 0; color: {IRONLADY_COLORS['warning']}; font-size: 2.8rem; font-weight: 900; line-height: 1;">
@@ -386,7 +364,6 @@ def generate_email_html(report_data=None, ocr_results=None):
                         </p>
                     </div>
                     
-                    <!-- Conversion Rate -->
                     <div style="background: {IRONLADY_COLORS['light']}; padding: 22px; border-radius: 0px; border-left: 6px solid {overall_color};">
                         <p style="margin: 0; color: {IRONLADY_COLORS['dark']}; font-size: 0.9rem; font-weight: 600; text-transform: uppercase;">Conversion Rate</p>
                         <p style="margin: 12px 0 0 0; color: {overall_color}; font-size: 2.8rem; font-weight: 900; line-height: 1;">
@@ -401,7 +378,6 @@ def generate_email_html(report_data=None, ocr_results=None):
                     
                 </div>
                 
-                <!-- Overall Status Banner -->
                 <div style="background: {IRONLADY_COLORS['accent']}; padding: 20px; border-radius: 0px; border-left: 6px solid {overall_color};">
                     <p style="margin: 0; color: {IRONLADY_COLORS['dark']}; font-weight: 700; font-size: 1.1rem; text-transform: uppercase;">
                         {overall_icon} <strong>Overall Status:</strong> {overall_status}
@@ -413,7 +389,6 @@ def generate_email_html(report_data=None, ocr_results=None):
                 </div>
             </div>
             
-            <!-- Team Lead Performance -->
             <div style="background: white; padding: 30px; border-radius: 0px; margin-bottom: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-left: 6px solid {IRONLADY_COLORS['primary']};">
                 <h2 style="color: {IRONLADY_COLORS['dark']}; margin: 0 0 20px 0; font-size: 1.6rem; font-weight: 900; border-bottom: 3px solid {IRONLADY_COLORS['primary']}; padding-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">
                     👥 TEAM LEADER PERFORMANCE
@@ -421,13 +396,10 @@ def generate_email_html(report_data=None, ocr_results=None):
                 {generate_team_lead_table(report_data.get('team_leads', []))}
             </div>
             
-            <!-- Checklist Section -->
             {generate_checklist_html(report_data.get('checklist', []))}
             
-            <!-- OCR Analysis Section -->
             {generate_ocr_summary_html(ocr_results)}
             
-            <!-- Action Items & Recommendations -->
             <div style="background: white; padding: 30px; border-radius: 0px; margin-bottom: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-left: 6px solid {IRONLADY_COLORS['primary']};">
                 <h2 style="color: {IRONLADY_COLORS['dark']}; margin: 0 0 20px 0; font-size: 1.6rem; font-weight: 900; border-bottom: 3px solid {IRONLADY_COLORS['primary']}; padding-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;">
                     🎯 KEY ACTION ITEMS
@@ -451,7 +423,6 @@ def generate_email_html(report_data=None, ocr_results=None):
                 </div>
             </div>
             
-            <!-- Dashboard Link -->
             <div style="background: {IRONLADY_COLORS['primary']}; padding: 25px; border-radius: 0px; text-align: center; margin-bottom: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
                 <p style="color: white; margin: 0 0 15px 0; font-size: 1.1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">
                     📊 ACCESS COMPLETE DASHBOARD
@@ -464,7 +435,6 @@ def generate_email_html(report_data=None, ocr_results=None):
                 </a>
             </div>
             
-            <!-- Footer -->
             <div style="background: {IRONLADY_COLORS['accent']}; padding: 25px; border-radius: 0px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-top: 5px solid {IRONLADY_COLORS['primary']}; border-bottom: 5px solid {IRONLADY_COLORS['primary']};">
                 <p style="color: {IRONLADY_COLORS['dark']}; margin: 0 0 10px 0; font-weight: 900; font-size: 1.3rem; text-transform: uppercase; letter-spacing: 2px;">
                     IRON LADY
@@ -488,17 +458,11 @@ def generate_email_html(report_data=None, ocr_results=None):
     
     return html
 
-# ============================================
-# EMAIL SENDING FUNCTIONS
-# ============================================
-
 def check_email_size(message):
-    """Check if email size is within Gmail limits"""
     email_size_mb = len(message.as_string().encode('utf-8')) / (1024 * 1024)
     return email_size_mb, email_size_mb < MAX_EMAIL_SIZE_MB
 
 def send_daily_email(report_data=None, ocr_results=None):
-    """Send Iron Lady branded daily email using Gmail SMTP"""
     sender_email = os.environ.get('GMAIL_USER')
     sender_password = os.environ.get('GMAIL_APP_PASSWORD')
     recipient_email = os.environ.get('CEO_EMAIL')
@@ -508,27 +472,22 @@ def send_daily_email(report_data=None, ocr_results=None):
         print("Required: GMAIL_USER, GMAIL_APP_PASSWORD, CEO_EMAIL")
         return False
     
-    # Create message
     message = MIMEMultipart("alternative")
     message["Subject"] = f"Iron Lady Daily Report | {datetime.now().strftime('%B %d, %Y')} - Performance Summary"
-    message["From"] = sender_email  # Fixed: Simple email format
+    message["From"] = formataddr(("Iron Lady Sales Tracker", sender_email))
     message["To"] = recipient_email
     message["Reply-To"] = sender_email
     
-    # Generate HTML content
     html_content = generate_email_html(report_data, ocr_results)
     html_part = MIMEText(html_content, "html")
     message.attach(html_part)
     
-    # Check email size
     email_size_mb, is_within_limit = check_email_size(message)
     
     if not is_within_limit:
         print(f"⚠️ Email size ({email_size_mb:.2f}MB) exceeds {MAX_EMAIL_SIZE_MB}MB limit. Truncating content...")
-        # Regenerate with less OCR data
         html_content = generate_email_html(report_data, ocr_results=None)
         
-        # Add warning message about truncation
         truncation_warning = f"""
         <div style="background: {IRONLADY_COLORS['warning']}; color: white; padding: 20px; border-radius: 0px; margin: 20px 0; text-align: center; font-weight: 700;">
             <p style="margin: 0; font-weight: 900; font-size: 1.1rem; text-transform: uppercase;">⚠️ CONTENT NOTICE</p>
@@ -543,12 +502,11 @@ def send_daily_email(report_data=None, ocr_results=None):
         html_part = MIMEText(html_content, "html")
         message = MIMEMultipart("alternative")
         message["Subject"] = f"Iron Lady Daily Report | {datetime.now().strftime('%B %d, %Y')} - Performance Summary"
-        message["From"] = sender_email  # Fixed: Simple email format
+        message["From"] = formataddr(("Iron Lady Sales Tracker", sender_email))
         message["To"] = recipient_email
         message.attach(html_part)
     
     try:
-        # Send email via Gmail SMTP
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, recipient_email, message.as_string())
@@ -569,19 +527,12 @@ def send_daily_email(report_data=None, ocr_results=None):
         print(f"❌ Unexpected error sending email: {e}")
         return False
 
-# ============================================
-# MAIN EXECUTION
-# ============================================
-
 if __name__ == "__main__":
     print("=" * 60)
     print("IRON LADY - Official Branded Daily Email Report")
     print("=" * 60)
     print(f"🕐 Execution time: {datetime.now().strftime('%I:%M %p IST on %B %d, %Y')}")
     print()
-    
-    # In production, load actual data from database/storage
-    # For now, using sample data
     
     print("📊 Generating Iron Lady branded report...")
     success = send_daily_email(report_data=None, ocr_results=None)

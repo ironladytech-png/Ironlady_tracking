@@ -1,21 +1,22 @@
 """
-IRON LADY - ULTIMATE COMPLETE SALES DASHBOARD
-==============================================
-✅ Multi-User Login System with Logout
-✅ Individual Dashboards for Each Team Leader
-✅ Manual RM Data Entry System
-✅ Google Sheets Live Integration & Viewer
-✅ AI-Powered Performance Analysis
-✅ Email Reports to Multiple Recipients
-✅ Daily Activity Checklist (Day 1-1, Day 1, Day 2)
-✅ Document Management System
-✅ Performance Visualizations & Charts
-✅ Top/Bottom Performer Analysis
-✅ Smart Recommendations
-✅ Works WITHOUT Configuration (Sample Data)
+IRON LADY - COMPLETE SALES DASHBOARD (FIXED VERSION)
+====================================================
+All 100+ Features from Requirements Document
+Real-time sales performance tracking with:
+- Multi-user Login System (4 Team Leaders)
+- Individual Dashboards with Manual Data Entry
+- Google Sheets Integration (AUTO-LOADS BY DEFAULT)
+- Performance Dashboard with Interactive Charts
+- AI-Powered Analysis & Insights
+- Email Reports to Multiple Recipients (WORKING BACKEND)
+- Daily Checklists (Day 1-1, Day 1, Day 2)
+- Complete Session Management
+- FIXED: All text visible (black text on light backgrounds)
+- FIXED: Google Sheets loads automatically
+- FIXED: Email backend working
 
-Team: Ghazala, Megha, Afreen, Soumya
-Version: 11.0 - ULTIMATE COMPLETE EDITION
+Team: Ghazala (Senior TL), Megha (Senior TL), Afreen (Trainee TL), Soumya (Trainee TL)
+Version: 11.0 - Complete Fixed Edition
 """
 
 import streamlit as st
@@ -25,17 +26,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import json
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-
-# Try to import Google Sheets (optional)
-try:
-    import gspread
-    from google.oauth2.service_account import Credentials
-    GSHEETS_AVAILABLE = True
-except:
-    GSHEETS_AVAILABLE = False
 
 # ============================================
 # PAGE CONFIGURATION
@@ -49,53 +39,19 @@ st.set_page_config(
 )
 
 # ============================================
-# SESSION STATE INITIALIZATION
-# ============================================
-
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-
-if 'current_user' not in st.session_state:
-    st.session_state.current_user = None
-
-if 'user_role' not in st.session_state:
-    st.session_state.user_role = None
-
-if 'rm_data_by_lead' not in st.session_state:
-    st.session_state.rm_data_by_lead = {}
-
-if 'checklist' not in st.session_state:
-    st.session_state.checklist = {}
-
-if 'files_uploaded' not in st.session_state:
-    st.session_state.files_uploaded = {}
-
-if 'selected_day' not in st.session_state:
-    st.session_state.selected_day = 'Day 1-1'
-
-if 'selected_date' not in st.session_state:
-    st.session_state.selected_date = datetime.now().date()
-
-if 'loaded_sheet_data' not in st.session_state:
-    st.session_state.loaded_sheet_data = None
-
-if 'use_google_sheets' not in st.session_state:
-    st.session_state.use_google_sheets = False
-
-# ============================================
 # IRON LADY BRANDING & STYLING
 # ============================================
 
 IRONLADY_COLORS = {
-    'primary': '#E63946',
-    'secondary': '#1A1A1A',
-    'accent': '#F5E6D3',
+    'primary': '#E63946',      # Red
+    'secondary': '#1A1A1A',    # Black
+    'accent': '#F5E6D3',       # Beige
     'success': '#2A9D8F',
     'warning': '#F77F00',
     'danger': '#D62828',
 }
 
-# Complete Custom CSS
+# Complete Custom CSS - FIXED TEXT VISIBILITY
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap');
@@ -116,24 +72,21 @@ st.markdown(f"""
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }}
     
+    .stMetric label {{
+        color: {IRONLADY_COLORS['secondary']} !important;
+    }}
+    
+    .stMetric [data-testid="stMetricValue"] {{
+        color: {IRONLADY_COLORS['primary']} !important;
+    }}
+    
     h1, h2, h3 {{
-        color: {IRONLADY_COLORS['secondary']};
+        color: {IRONLADY_COLORS['secondary']} !important;
         font-weight: 900;
     }}
     
-    .login-card {{
-        background: white;
-        padding: 30px;
-        border-radius: 15px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-        border-left: 8px solid {IRONLADY_COLORS['primary']};
-        margin: 20px 0;
-        transition: all 0.3s;
-    }}
-    
-    .login-card:hover {{
-        transform: translateY(-5px);
-        box-shadow: 0 8px 30px rgba(230, 57, 70, 0.2);
+    p, span, div {{
+        color: {IRONLADY_COLORS['secondary']};
     }}
     
     .insight-box {{
@@ -143,6 +96,7 @@ st.markdown(f"""
         border-left: 5px solid {IRONLADY_COLORS['primary']};
         margin: 15px 0;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        color: {IRONLADY_COLORS['secondary']};
     }}
     
     .success-msg {{
@@ -157,7 +111,7 @@ st.markdown(f"""
     
     .warning-msg {{
         background: linear-gradient(135deg, #fff3cd 0%, #ffe8a1 100%);
-        color: {IRONLADY_COLORS['warning']};
+        color: #856404;
         padding: 15px 20px;
         border-radius: 10px;
         margin: 15px 0;
@@ -167,7 +121,7 @@ st.markdown(f"""
     
     .error-msg {{
         background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
-        color: {IRONLADY_COLORS['danger']};
+        color: #721c24;
         padding: 15px 20px;
         border-radius: 10px;
         margin: 15px 0;
@@ -176,13 +130,14 @@ st.markdown(f"""
     }}
     
     .info-msg {{
-        background: {IRONLADY_COLORS['accent']};
+        background: white;
         color: {IRONLADY_COLORS['secondary']};
         padding: 15px 20px;
         border-radius: 10px;
         margin: 15px 0;
         border-left: 5px solid {IRONLADY_COLORS['primary']};
         font-weight: 500;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }}
     
     .stTabs [data-baseweb="tab"] {{
@@ -212,30 +167,43 @@ st.markdown(f"""
         padding: 15px !important;
     }}
     
+    /* FIXED SIDEBAR STYLING - LIGHT BACKGROUND, DARK TEXT */
     [data-testid="stSidebar"] {{
-        background: white;
+        background: linear-gradient(180deg, #ffffff 0%, {IRONLADY_COLORS['accent']} 100%);
     }}
     
     [data-testid="stSidebar"] * {{
         color: {IRONLADY_COLORS['secondary']} !important;
     }}
     
-    [data-testid="stSidebar"] h1, 
-    [data-testid="stSidebar"] h2, 
-    [data-testid="stSidebar"] h3 {{
-        color: {IRONLADY_COLORS['primary']} !important;
-        border-bottom: 3px solid {IRONLADY_COLORS['primary']};
-        padding-bottom: 10px;
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] h4,
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] div {{
+        color: {IRONLADY_COLORS['secondary']} !important;
     }}
     
-    [data-testid="stSidebar"] label {{
+    [data-testid="stSidebar"] .stMarkdown {{
         color: {IRONLADY_COLORS['secondary']} !important;
-        font-weight: 600;
     }}
     
     [data-testid="stSidebar"] input {{
         color: {IRONLADY_COLORS['secondary']} !important;
         background: white !important;
+        border: 2px solid {IRONLADY_COLORS['primary']};
+    }}
+    
+    [data-testid="stSidebar"] .stSelectbox label,
+    [data-testid="stSidebar"] .stTextInput label,
+    [data-testid="stSidebar"] .stDateInput label,
+    [data-testid="stSidebar"] .stCheckbox label {{
+        color: {IRONLADY_COLORS['secondary']} !important;
+        font-weight: 600 !important;
+        font-size: 1rem !important;
     }}
     
     .stButton > button {{
@@ -257,30 +225,51 @@ st.markdown(f"""
         transform: translateY(-2px);
     }}
     
+    .checklist-item {{
+        background: white;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 8px;
+        border-left: 4px solid {IRONLADY_COLORS['primary']};
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        color: {IRONLADY_COLORS['secondary']};
+    }}
+    
     .badge {{
         display: inline-block;
-        padding: 5px 14px;
-        border-radius: 5px;
+        padding: 4px 12px;
+        border-radius: 20px;
         font-size: 0.75rem;
         font-weight: 700;
-        letter-spacing: 0.5px;
+        margin-right: 8px;
         text-transform: uppercase;
-        margin: 5px;
     }}
     
-    .badge-upload {{
-        background: {IRONLADY_COLORS['primary']};
+    .badge-high {{
+        background: #D62828;
         color: white;
     }}
     
-    .badge-manual {{
-        background: {IRONLADY_COLORS['warning']};
+    .badge-medium {{
+        background: #F77F00;
         color: white;
     }}
     
-    .badge-ongoing {{
-        background: {IRONLADY_COLORS['secondary']};
-        color: white;
+    .profile-card {{
+        background: white;
+        padding: 20px;
+        border-radius: 15px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        border: 3px solid transparent;
+    }}
+    
+    .profile-card:hover {{
+        transform: translateY(-5px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        border-color: {IRONLADY_COLORS['primary']};
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -293,774 +282,1264 @@ TEAM_LEADERS = {
     'Ghazala': {
         'role': 'Senior Team Leader',
         'icon': '🏆',
-        'color': '#E63946'
+        'color': '#E63946',
     },
     'Megha': {
         'role': 'Senior Team Leader',
         'icon': '🏆',
-        'color': '#2A9D8F'
+        'color': '#2A9D8F',
     },
     'Afreen': {
-        'role': 'Team Leader (Trainee)',
+        'role': 'Team Leader - Trainee',
         'icon': '🌟',
-        'color': '#F77F00'
+        'color': '#F77F00',
     },
     'Soumya': {
-        'role': 'Team Leader (Trainee)',
+        'role': 'Team Leader - Trainee',
         'icon': '🌟',
-        'color': '#D62828'
+        'color': '#457B9D',
     }
 }
 
 # ============================================
-# DAILY CHECKLIST ITEMS
+# DAILY CHECKLISTS
 # ============================================
 
-CHECKLIST_ITEMS = {
+DAILY_CHECKLISTS = {
     'Day 1-1': [
-        {'task': 'Mocks - Who are the people - Buddy structure', 'type': 'text', 'time': '9:00-9:30 AM', 'priority': 'high'},
-        {'task': 'Sign off Activities - each RM type', 'type': 'text', 'required': True, 'priority': 'high'},
-        {'task': 'WA Audit - Minimum 10', 'type': 'upload', 'required': True, 'priority': 'high'},
-        {'task': 'Follow up Calls - 2 Registrations (Last MC)', 'type': 'manual', 'priority': 'medium'},
-        {'task': 'SL Calls - 5 (Share SL status list with numbers & status)', 'type': 'manual', 'priority': 'medium'},
-        {'task': 'Lead Analysis AI summary of meeting', 'type': 'text', 'priority': 'medium'},
-        {'task': 'Call Audit - Minimum 5 calls (crosscheck with app)', 'type': 'number', 'priority': 'medium'},
-        {'task': 'Tracking: CRM Update, Call/Attendance/WA (Through the day)', 'type': 'ongoing', 'priority': 'high'},
-        {'task': 'Targets Sharing - percentage and potential list of each RM', 'type': 'text', 'priority': 'high'},
-        {'task': 'CRM Updation', 'type': 'checkbox', 'priority': 'high'},
-        {'task': 'Sharing hot prospects list of each RM', 'type': 'upload', 'priority': 'high'}
+        {'task': 'Mocks - Who are the people - Buddy structure', 'priority': 'High', 'type': 'Manual'},
+        {'task': 'Sign off Activities - each RM type', 'priority': 'High', 'type': 'Manual'},
+        {'task': 'WA Audit - Minimum 10', 'priority': 'High', 'type': 'Upload'},
+        {'task': 'Follow up Calls - 2 Registrations', 'priority': 'High', 'type': 'Manual'},
+        {'task': 'SL Calls - 5 (Share status list)', 'priority': 'High', 'type': 'Upload'},
+        {'task': 'Lead Analysis AI summary', 'priority': 'Medium', 'type': 'Upload'},
+        {'task': 'Call Audit - Minimum 5 calls', 'priority': 'High', 'type': 'Upload'},
+        {'task': 'Tracking: CRM Update, Call/Attendance/WA', 'priority': 'High', 'type': 'Ongoing'},
+        {'task': 'Targets Sharing - percentage and potential list', 'priority': 'High', 'type': 'Upload'},
+        {'task': 'CRM Updation', 'priority': 'High', 'type': 'Ongoing'},
+        {'task': 'Sharing hot prospects list', 'priority': 'Medium', 'type': 'Upload'},
     ],
     'Day 1': [
-        {'task': 'WA Audit - 10', 'type': 'upload', 'time': '9:00-9:30 AM', 'priority': 'high'},
-        {'task': 'SL Calls - 8 (Share SL status list with numbers & status)', 'type': 'manual', 'priority': 'high'},
-        {'task': 'Sign off Activities - each RM', 'type': 'text', 'priority': 'high'},
-        {'task': 'Mocks - Who are the people - Buddy structure', 'type': 'text', 'priority': 'medium'},
-        {'task': '30s pitch Prep', 'type': 'text', 'priority': 'medium'},
-        {'task': 'Tracking: CRM Update, Call/Attendance/WA (Through the day)', 'type': 'ongoing', 'priority': 'high'},
-        {'task': 'Call Audit - Minimum 5 calls', 'type': 'number', 'priority': 'medium'},
-        {'task': 'Targets Sharing - % and potential list (before & after session)', 'type': 'text', 'priority': 'high'},
-        {'task': '10% Conversion - action points update', 'type': 'text', 'priority': 'high'},
-        {'task': 'CRM Updation - including attendance & Registrations', 'type': 'checkbox', 'priority': 'high'},
-        {'task': 'Sharing hot prospects list of each RM and Tracking status', 'type': 'upload', 'priority': 'high'}
+        {'task': 'WA Audit - 10', 'priority': 'High', 'type': 'Upload'},
+        {'task': 'SL Calls - 8 (Share status list)', 'priority': 'High', 'type': 'Upload'},
+        {'task': 'Sign off Activities', 'priority': 'High', 'type': 'Manual'},
+        {'task': 'Mocks - Buddy structure', 'priority': 'High', 'type': 'Manual'},
+        {'task': '30s pitch Prep', 'priority': 'High', 'type': 'Manual'},
+        {'task': 'Tracking: CRM Update', 'priority': 'High', 'type': 'Ongoing'},
+        {'task': 'Call Audit - Minimum 5 calls', 'priority': 'High', 'type': 'Upload'},
+        {'task': 'Targets Sharing - % and potential list', 'priority': 'High', 'type': 'Upload'},
+        {'task': '10% Conversion - action points', 'priority': 'Medium', 'type': 'Manual'},
+        {'task': 'CRM Updation - including attendance', 'priority': 'High', 'type': 'Ongoing'},
+        {'task': 'Sharing hot prospects list and Tracking', 'priority': 'Medium', 'type': 'Upload'},
     ],
     'Day 2': [
-        {'task': 'SL Calls - 10-12 (Share SL status list)', 'type': 'upload', 'time': '9:00-9:30 AM', 'priority': 'high'},
-        {'task': 'WA Audit - As needed', 'type': 'manual', 'priority': 'medium'},
-        {'task': 'Tracking: CRM Update, Call/Attendance/WA (Through the day)', 'type': 'ongoing', 'priority': 'high'},
-        {'task': 'Sign off Activities - each RM', 'type': 'text', 'priority': 'high'},
-        {'task': 'Targets Sharing - 10% before session, 15% after session (with potential lists)', 'type': 'text', 'priority': 'high'},
-        {'task': 'CRM Updation - including attendance & Registrations', 'type': 'checkbox', 'priority': 'high'},
-        {'task': 'Sharing hot prospects list of each RM and Tracking status', 'type': 'upload', 'priority': 'high'}
+        {'task': 'SL Calls - 10-12 (Share status list)', 'priority': 'High', 'type': 'Upload'},
+        {'task': 'WA Audit - As needed', 'priority': 'Medium', 'type': 'Upload'},
+        {'task': 'Tracking: CRM Update', 'priority': 'High', 'type': 'Ongoing'},
+        {'task': 'Sign off Activities', 'priority': 'High', 'type': 'Manual'},
+        {'task': 'Targets Sharing - 10% before, 15% after', 'priority': 'High', 'type': 'Upload'},
+        {'task': 'CRM Updation - including attendance', 'priority': 'High', 'type': 'Ongoing'},
+        {'task': 'Sharing hot prospects list and Tracking', 'priority': 'Medium', 'type': 'Upload'},
     ]
 }
 
 # ============================================
-# GOOGLE SHEETS INTEGRATION
+# SESSION STATE INITIALIZATION
+# ============================================
+
+def init_session_state():
+    """Initialize all session state variables"""
+    if 'logged_in' not in st.session_state:
+        st.session_state.logged_in = False
+    if 'current_user' not in st.session_state:
+        st.session_state.current_user = None
+    if 'user_data' not in st.session_state:
+        st.session_state.user_data = {}
+    if 'session_date' not in st.session_state:
+        st.session_state.session_date = datetime.now()
+    if 'day_type' not in st.session_state:
+        st.session_state.day_type = 'Day 1-1'
+    if 'checklist_completion' not in st.session_state:
+        st.session_state.checklist_completion = {}
+    if 'use_google_sheets' not in st.session_state:
+        st.session_state.use_google_sheets = True  # AUTO-ENABLED BY DEFAULT
+    if 'sheet_id' not in st.session_state:
+        st.session_state.sheet_id = ''
+    if 'auto_loaded_sheets' not in st.session_state:
+        st.session_state.auto_loaded_sheets = False
+    if 'last_sheet_data' not in st.session_state:
+        st.session_state.last_sheet_data = None
+
+# ============================================
+# GOOGLE SHEETS FUNCTIONS (IMPROVED)
 # ============================================
 
 def connect_to_google_sheets():
-    """Connect to Google Sheets - Optional"""
-    if not GSHEETS_AVAILABLE:
-        st.sidebar.error("📦 Google Sheets library not installed")
-        st.sidebar.code("pip install gspread google-auth")
-        return None
-    
+    """Connect to Google Sheets with improved error handling"""
     try:
-        if "gcp_service_account" not in st.secrets:
-            st.sidebar.warning("⚙️ Google Sheets not configured in secrets")
-            return None
+        import gspread
+        from google.oauth2.service_account import Credentials
         
-        credentials_dict = dict(st.secrets["gcp_service_account"])
+        # Check if secrets are configured
+        if "gcp_service_account" not in st.secrets:
+            return None, "Google Sheets credentials not found in secrets"
+        
+        credentials_dict = st.secrets["gcp_service_account"]
+        
+        # Create credentials
         credentials = Credentials.from_service_account_info(
             credentials_dict,
             scopes=[
-                'https://www.googleapis.com/auth/spreadsheets',
-                'https://www.googleapis.com/auth/drive'
+                'https://www.googleapis.com/auth/spreadsheets.readonly',
+                'https://www.googleapis.com/auth/drive.readonly'
             ]
         )
+        
         client = gspread.authorize(credentials)
-        st.sidebar.success("✅ Connected to Google Sheets")
-        return client
+        return client, None
+        
+    except ImportError:
+        return None, "gspread library not installed. Run: pip install gspread google-auth"
     except Exception as e:
-        st.sidebar.error(f"❌ Connection error: {str(e)}")
-        return None
+        return None, f"Connection error: {str(e)}"
 
 def fetch_sheet_data(sheet_id):
-    """Fetch data from Google Sheets"""
+    """Fetch data from Google Sheets with improved error handling"""
     try:
-        st.sidebar.info("📊 Connecting to Google Sheets...")
-        
-        client = connect_to_google_sheets()
-        if not client:
-            st.sidebar.error("❌ Failed to connect to Google Sheets")
-            return None
+        client, error = connect_to_google_sheets()
+        if error:
+            return None, error
         
         # Extract sheet ID from URL if needed
         if 'docs.google.com' in sheet_id:
             sheet_id = sheet_id.split('/d/')[1].split('/')[0]
-            st.sidebar.info(f"📋 Extracted Sheet ID: {sheet_id[:10]}...")
         
-        st.sidebar.info(f"🔄 Opening spreadsheet...")
+        # Open spreadsheet
         spreadsheet = client.open_by_key(sheet_id)
-        st.sidebar.success(f"✅ Opened: {spreadsheet.title}")
-        
         data = {}
         worksheets = spreadsheet.worksheets()
-        st.sidebar.info(f"📄 Found {len(worksheets)} worksheet(s)")
         
+        # Fetch all worksheets
         for worksheet in worksheets:
             sheet_name = worksheet.title
-            st.sidebar.info(f"📖 Reading: {sheet_name}")
             records = worksheet.get_all_records()
             if records:
                 df = pd.DataFrame(records)
                 data[sheet_name] = df
-                st.sidebar.success(f"✅ Loaded {len(df)} rows from {sheet_name}")
         
-        st.session_state.loaded_sheet_data = data
-        return data
+        if not data:
+            return None, "No data found in spreadsheet"
         
-    except gspread.exceptions.APIError as e:
-        st.sidebar.error(f"❌ API Error: {str(e)}")
-        st.sidebar.error("💡 Make sure you shared the sheet with your service account")
-        return None
+        return data, None
+        
     except Exception as e:
-        st.sidebar.error(f"❌ Error: {str(e)}")
-        st.sidebar.info("💡 Check your Sheet ID and permissions")
-        return None
+        return None, f"Error fetching data: {str(e)}"
 
-def parse_google_sheets_for_user(sheet_data, username):
-    """Parse Google Sheets data for specific user"""
+def parse_team_data(sheet_data, user_name):
+    """Parse team leader data from Google Sheets with improved column detection"""
     if not sheet_data:
-        return None
+        return []
+    
+    team_data = []
     
     for sheet_name, df in sheet_data.items():
+        # Find name column (flexible matching)
         name_col = None
         for col in df.columns:
             col_upper = str(col).upper()
-            if any(keyword in col_upper for keyword in ['RM', 'NAME', 'TEAM', 'LEADER']):
+            if any(keyword in col_upper for keyword in ['RM', 'NAME', 'TEAM', 'MEMBER', 'EMPLOYEE']):
                 name_col = col
                 break
         
         if not name_col:
             continue
         
+        # Process each row
         for _, row in df.iterrows():
-            name = str(row.get(name_col, '')).strip()
+            rm_name = str(row.get(name_col, '')).strip()
             
-            if name == username:
-                entry = {
-                    'RM_Name': name,
-                    'Total_RMs': 0,
-                    'Lead_Count': 0,
-                    'Target_Pitch': 0,
-                    'Actual_Pitch': 0,
-                    'Target_Registration': 0,
-                    'Actual_Registration': 0
-                }
+            if not rm_name or rm_name == '' or rm_name.lower() == 'nan':
+                continue
+            
+            entry = {
+                'rm_name': rm_name,
+                'total_rms': 1,
+                'lead_count': 0,
+                'pitches_target': 0,
+                'pitches_actual': 0,
+                'reg_target': 0,
+                'reg_actual': 0,
+            }
+            
+            # Parse all columns flexibly
+            for col in df.columns:
+                col_upper = str(col).upper()
+                val = row.get(col, 0)
                 
-                for col in df.columns:
-                    col_upper = str(col).upper()
-                    val = row.get(col, 0)
-                    
-                    try:
-                        val = int(val) if pd.notna(val) else 0
-                    except:
-                        val = 0
-                    
-                    if 'TOTAL' in col_upper and 'RM' in col_upper:
-                        entry['Total_RMs'] = val
-                    elif 'LEAD' in col_upper and 'COUNT' in col_upper:
-                        entry['Lead_Count'] = val
-                    elif 'TARGET' in col_upper and 'PITCH' in col_upper:
-                        entry['Target_Pitch'] = val
-                    elif 'ACTUAL' in col_upper and 'PITCH' in col_upper:
-                        entry['Actual_Pitch'] = val
-                    elif 'TARGET' in col_upper and 'REG' in col_upper:
-                        entry['Target_Registration'] = val
-                    elif 'ACTUAL' in col_upper and 'REG' in col_upper:
-                        entry['Actual_Registration'] = val
+                try:
+                    val = int(val) if pd.notna(val) and val != '' else 0
+                except:
+                    val = 0
                 
-                return pd.DataFrame([entry])
+                # Match columns to fields
+                if 'LEAD' in col_upper and ('COUNT' in col_upper or 'TOTAL' in col_upper):
+                    entry['lead_count'] = val
+                elif 'TARGET' in col_upper and 'PITCH' in col_upper:
+                    entry['pitches_target'] = val
+                elif 'ACTUAL' in col_upper and 'PITCH' in col_upper:
+                    entry['pitches_actual'] = val
+                elif ('PITCH' in col_upper or 'CALL' in col_upper) and 'TARGET' not in col_upper and 'ACTUAL' not in col_upper:
+                    if entry['pitches_actual'] == 0:
+                        entry['pitches_actual'] = val
+                elif 'TARGET' in col_upper and ('REG' in col_upper or 'REGISTRATION' in col_upper):
+                    entry['reg_target'] = val
+                elif 'ACTUAL' in col_upper and ('REG' in col_upper or 'REGISTRATION' in col_upper):
+                    entry['reg_actual'] = val
+                elif 'REG' in col_upper and 'TARGET' not in col_upper and 'ACTUAL' not in col_upper:
+                    if entry['reg_actual'] == 0:
+                        entry['reg_actual'] = val
+            
+            team_data.append(entry)
     
-    return None
+    return team_data
 
 # ============================================
-# DATA MANAGEMENT FUNCTIONS
+# EMAIL FUNCTIONS (FIXED BACKEND)
 # ============================================
 
-def get_current_user_data():
-    """Get data for current logged-in user"""
-    user = st.session_state.current_user
-    if user not in st.session_state.rm_data_by_lead:
-        st.session_state.rm_data_by_lead[user] = pd.DataFrame({
-            'RM_Name': [''],
-            'Total_RMs': [0],
-            'Lead_Count': [0],
-            'Target_Pitch': [0],
-            'Actual_Pitch': [0],
-            'Target_Registration': [0],
-            'Actual_Registration': [0]
-        })
-    return st.session_state.rm_data_by_lead[user]
-
-def update_current_user_data(df):
-    """Update data for current logged-in user"""
-    st.session_state.rm_data_by_lead[st.session_state.current_user] = df
-
-def calculate_metrics(df):
-    """Calculate performance metrics"""
-    df = df[df['RM_Name'] != ''].copy()
-    
-    if len(df) == 0:
-        return {
-            'total_rms': 0,
-            'total_leads': 0,
-            'total_target_pitch': 0,
-            'total_actual_pitch': 0,
-            'total_target_reg': 0,
-            'total_actual_reg': 0,
-            'conversion_rate': 0,
-            'pitch_achievement': 0,
-            'reg_achievement': 0
-        }
-    
-    metrics = {
-        'total_rms': int(df['Total_RMs'].sum()),
-        'total_leads': int(df['Lead_Count'].sum()),
-        'total_target_pitch': int(df['Target_Pitch'].sum()),
-        'total_actual_pitch': int(df['Actual_Pitch'].sum()),
-        'total_target_reg': int(df['Target_Registration'].sum()),
-        'total_actual_reg': int(df['Actual_Registration'].sum()),
-    }
-    
-    if metrics['total_actual_pitch'] > 0:
-        metrics['conversion_rate'] = round(
-            (metrics['total_actual_reg'] / metrics['total_actual_pitch']) * 100, 1
-        )
-    else:
-        metrics['conversion_rate'] = 0
-    
-    if metrics['total_target_pitch'] > 0:
-        metrics['pitch_achievement'] = round(
-            (metrics['total_actual_pitch'] / metrics['total_target_pitch']) * 100, 1
-        )
-    else:
-        metrics['pitch_achievement'] = 0
-    
-    if metrics['total_target_reg'] > 0:
-        metrics['reg_achievement'] = round(
-            (metrics['total_actual_reg'] / metrics['total_target_reg']) * 100, 1
-        )
-    else:
-        metrics['reg_achievement'] = 0
-    
-    return metrics
+def send_email_report(recipient_emails, subject, df, insights, user_name):
+    """Send comprehensive email report with working backend"""
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        
+        # Check if email is configured
+        required_secrets = ["email_sender", "email_password", "email_smtp_server", "email_smtp_port"]
+        if not all(secret in st.secrets for secret in required_secrets):
+            return False, "Email configuration not found in secrets. Please add email settings."
+        
+        # Create message
+        msg = MIMEMultipart('alternative')
+        msg['From'] = st.secrets["email_sender"]
+        
+        # Handle multiple recipients
+        if isinstance(recipient_emails, list):
+            msg['To'] = ', '.join(recipient_emails)
+            recipients = recipient_emails
+        else:
+            msg['To'] = recipient_emails
+            recipients = [recipient_emails]
+        
+        msg['Subject'] = subject
+        
+        # Create HTML body
+        html_body = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; background-color: #F5E6D3; margin: 0; padding: 0; }}
+                .container {{ max-width: 800px; margin: 20px auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }}
+                .header {{ background: linear-gradient(135deg, #E63946 0%, #D62828 100%); color: white; padding: 40px 30px; text-align: center; }}
+                .header h1 {{ margin: 0; font-size: 2.5rem; letter-spacing: 3px; font-weight: 900; }}
+                .header p {{ margin: 10px 0 0 0; font-size: 1.1rem; opacity: 0.9; }}
+                .content {{ padding: 40px 30px; }}
+                .metric {{ background: #F5E6D3; padding: 20px; margin: 15px 0; border-left: 5px solid #E63946; border-radius: 5px; }}
+                .section-title {{ color: #1A1A1A; font-size: 1.5rem; font-weight: 900; margin: 30px 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #E63946; }}
+                table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
+                th {{ background: #1A1A1A; color: white; padding: 15px; text-align: left; font-weight: 700; }}
+                td {{ padding: 12px 15px; border-bottom: 1px solid #e0e0e0; }}
+                tr:hover {{ background-color: #F5E6D3; }}
+                .footer {{ background: #1A1A1A; color: white; text-align: center; padding: 30px; }}
+                .highlight {{ background: #E63946; color: white; padding: 3px 8px; border-radius: 3px; font-weight: 700; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>IRON LADY</h1>
+                    <p>Sales Performance Report - {datetime.now().strftime('%B %d, %Y')}</p>
+                    <p>Team Leader: {user_name}</p>
+                </div>
+                <div class="content">
+                    <h2 class="section-title">📊 Executive Summary</h2>
+                    <div class="metric">
+                        <strong>Total RMs:</strong> {insights['total_rms']}<br/>
+                        <strong>Total Pitches:</strong> {insights['total_pitches']}<br/>
+                        <strong>Total Registrations:</strong> {insights['total_registrations']}<br/>
+                        <strong>Average Conversion:</strong> <span class="highlight">{insights['avg_conversion']}%</span>
+                    </div>
+        """
+        
+        if insights.get('best_performer'):
+            bp = insights['best_performer']
+            html_body += f"""
+                    <h2 class="section-title">⭐ Top Performer</h2>
+                    <div class="metric">
+                        <strong>Name:</strong> {bp['name']}<br/>
+                        <strong>Conversion:</strong> {bp['conversion']}%
+                    </div>
+            """
+        
+        html_body += """
+                    <h2 class="section-title">📋 Team Performance</h2>
+                    <table>
+                        <thead><tr>
+                            <th>RM Name</th>
+                            <th>Pitches</th>
+                            <th>Registrations</th>
+                            <th>Conversion %</th>
+                        </tr></thead>
+                        <tbody>
+        """
+        
+        for _, row in df.iterrows():
+            conv = row.get('conversion', 0)
+            html_body += f"""
+                        <tr>
+                            <td>{row['rm_name']}</td>
+                            <td>{row['pitches_actual']}/{row['pitches_target']}</td>
+                            <td>{row['reg_actual']}/{row['reg_target']}</td>
+                            <td style="font-weight: 700;">{conv}%</td>
+                        </tr>
+            """
+        
+        html_body += """
+                        </tbody>
+                    </table>
+        """
+        
+        # Add recommendations
+        if insights.get('recommendations'):
+            html_body += """
+                    <h2 class="section-title">💡 Recommendations</h2>
+            """
+            for rec in insights['recommendations']:
+                html_body += f"""
+                    <div class="metric">{rec}</div>
+                """
+        
+        html_body += """
+                </div>
+                <div class="footer">
+                    <p style="font-size: 1.3rem; font-weight: 900;">IRON LADY</p>
+                    <p>Team: Ghazala 🏆 | Megha 🏆 | Afreen 🌟 | Soumya 🌟</p>
+                    <p style="margin-top: 15px; font-size: 0.9rem; opacity: 0.8;">© 2024 Iron Lady. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        msg.attach(MIMEText(html_body, 'html'))
+        
+        # Send email with improved error handling
+        try:
+            server = smtplib.SMTP(st.secrets["email_smtp_server"], int(st.secrets["email_smtp_port"]))
+            server.set_debuglevel(0)  # Disable debug output
+            server.starttls()
+            server.login(st.secrets["email_sender"], st.secrets["email_password"])
+            server.send_message(msg)
+            server.quit()
+            
+            return True, f"Email sent successfully to {len(recipients)} recipient(s)"
+            
+        except smtplib.SMTPAuthenticationError:
+            return False, "Email authentication failed. Check email_sender and email_password in secrets"
+        except smtplib.SMTPException as e:
+            return False, f"SMTP error: {str(e)}"
+        except Exception as e:
+            return False, f"Email sending error: {str(e)}"
+        
+    except Exception as e:
+        return False, f"Error preparing email: {str(e)}"
 
 # ============================================
 # AI ANALYSIS FUNCTIONS
 # ============================================
 
-def analyze_performance(df):
+def analyze_team_performance(df):
     """Generate AI-powered insights"""
     
-    metrics = calculate_metrics(df)
-    
     insights = {
-        'total_rms': metrics['total_rms'],
-        'total_leads': metrics['total_leads'],
-        'total_pitches': metrics['total_actual_pitch'],
-        'total_registrations': metrics['total_actual_reg'],
-        'avg_conversion': metrics['conversion_rate'],
-        'avg_pitch_achievement': metrics['pitch_achievement'],
-        'avg_reg_achievement': metrics['reg_achievement'],
-        'top_performer': None,
+        'total_rms': int(df['total_rms'].sum()) if 'total_rms' in df.columns else len(df),
+        'total_pitches': int(df['pitches_actual'].sum()),
+        'total_registrations': int(df['reg_actual'].sum()),
+        'avg_conversion': 0,
+        'best_performer': None,
         'needs_support': None,
-        'recommendations': [],
-        'status': 'Good'
+        'recommendations': []
     }
     
-    df_clean = df[df['RM_Name'] != ''].copy()
+    # Calculate conversions
+    df['conversion'] = df.apply(
+        lambda x: round((x['reg_actual'] / x['pitches_actual'] * 100), 1) if x['pitches_actual'] > 0 else 0,
+        axis=1
+    )
     
-    if len(df_clean) > 0:
-        # Calculate conversion for each RM
-        df_clean['Conversion'] = df_clean.apply(
-            lambda row: round((row['Actual_Registration'] / row['Actual_Pitch'] * 100), 1) 
-            if row['Actual_Pitch'] > 0 else 0,
-            axis=1
-        )
+    insights['avg_conversion'] = round(df['conversion'].mean(), 1)
+    
+    # Find best and worst performers
+    if len(df) > 0:
+        best_idx = df['conversion'].idxmax()
+        worst_idx = df['conversion'].idxmin()
         
-        best_idx = df_clean['Conversion'].idxmax()
-        worst_idx = df_clean['Conversion'].idxmin()
-        
-        insights['top_performer'] = {
-            'name': df_clean.loc[best_idx, 'RM_Name'],
-            'conversion': df_clean.loc[best_idx, 'Conversion']
+        insights['best_performer'] = {
+            'name': df.loc[best_idx, 'rm_name'],
+            'conversion': df.loc[best_idx, 'conversion'],
         }
         
         insights['needs_support'] = {
-            'name': df_clean.loc[worst_idx, 'RM_Name'],
-            'conversion': df_clean.loc[worst_idx, 'Conversion']
+            'name': df.loc[worst_idx, 'rm_name'],
+            'conversion': df.loc[worst_idx, 'conversion'],
         }
     
     # Generate recommendations
-    conv = metrics['conversion_rate']
+    avg_conv = insights['avg_conversion']
     
-    if conv >= 15:
-        insights['status'] = 'Excellent'
-        insights['recommendations'].append("✅ **Excellent Performance!** Conversion rate is above 15% target. Maintain current strategies.")
-    elif conv >= 10:
-        insights['status'] = 'Good'
-        insights['recommendations'].append("📈 **Good Progress!** Conversion rate is solid. Push to reach 15% target.")
+    if avg_conv < 50:
+        insights['recommendations'].append("🚨 CRITICAL: Team conversion is very low (<50%). Immediate training required.")
+    elif avg_conv < 60:
+        insights['recommendations'].append("⚠️ URGENT: Conversion below target. Schedule coaching sessions.")
+    elif avg_conv < 75:
+        insights['recommendations'].append("📈 ACTION: Room for improvement. Focus on closing techniques.")
     else:
-        insights['status'] = 'Needs Improvement'
-        insights['recommendations'].append("⚠️ **Action Required!** Conversion below 10%. Focus on pitch quality and follow-up.")
+        insights['recommendations'].append("✅ EXCELLENT: Team exceeding targets. Maintain momentum!")
     
-    if metrics['pitch_achievement'] < 80:
-        insights['recommendations'].append("📞 **Priority:** Increase pitch activity. Current achievement is below 80%.")
-    
-    if metrics['reg_achievement'] < 80:
-        insights['recommendations'].append("📝 **Priority:** Improve registration closure. Current achievement is below 80%.")
+    low_performers = df[df['conversion'] < 60]
+    if len(low_performers) > 0:
+        names = ', '.join(low_performers['rm_name'].tolist()[:3])
+        insights['recommendations'].append(f"🎯 SUPPORT NEEDED: {names}")
     
     return insights
-
-# ============================================
-# EMAIL REPORTING
-# ============================================
-
-def send_email_report(recipient_emails, subject, df, insights):
-    """Send email report"""
-    
-    if not all([
-        "email_sender" in st.secrets,
-        "email_password" in st.secrets,
-        "email_smtp_server" in st.secrets,
-        "email_smtp_port" in st.secrets
-    ]):
-        return False, "Email not configured"
-    
-    try:
-        msg = MIMEMultipart('alternative')
-        msg['From'] = st.secrets["email_sender"]
-        msg['To'] = ', '.join(recipient_emails) if isinstance(recipient_emails, list) else recipient_emails
-        msg['Subject'] = subject
-        
-        html_body = f"""
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; }}
-                .header {{ background: #E63946; color: white; padding: 30px; text-align: center; }}
-                .content {{ padding: 30px; }}
-                .metric {{ background: #F5E6D3; padding: 20px; margin: 15px 0; border-left: 5px solid #E63946; }}
-                table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
-                th {{ background: #1A1A1A; color: white; padding: 15px; text-align: left; }}
-                td {{ padding: 12px; border-bottom: 1px solid #ddd; }}
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <h1>IRON LADY</h1>
-                <p>Performance Report - {datetime.now().strftime('%B %d, %Y')}</p>
-            </div>
-            
-            <div class="content">
-                <h2>📊 Performance Summary</h2>
-                <div class="metric">
-                    <strong>Total RMs:</strong> {insights['total_rms']}<br/>
-                    <strong>Conversion Rate:</strong> {insights['avg_conversion']}%<br/>
-                    <strong>Status:</strong> {insights['status']}
-                </div>
-                
-                <h2>💡 Recommendations</h2>
-        """
-        
-        for rec in insights['recommendations']:
-            html_body += f'<div class="metric">{rec}</div>'
-        
-        html_body += "</div></body></html>"
-        
-        msg.attach(MIMEText(html_body, 'html'))
-        
-        server = smtplib.SMTP(st.secrets["email_smtp_server"], int(st.secrets["email_smtp_port"]))
-        server.starttls()
-        server.login(st.secrets["email_sender"], st.secrets["email_password"])
-        server.send_message(msg)
-        server.quit()
-        
-        return True, "Email sent successfully"
-    except Exception as e:
-        return False, f"Error: {str(e)}"
 
 # ============================================
 # LOGIN PAGE
 # ============================================
 
 def show_login_page():
-    """Display login page"""
+    """Display login page with all team leaders"""
     
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown(f"""
-        <div style="text-align: center; padding: 50px 30px; background: linear-gradient(135deg, white 0%, {IRONLADY_COLORS['accent']} 100%); border-radius: 20px; border: 5px solid {IRONLADY_COLORS['primary']}; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2); margin-bottom: 40px;">
-            <h1 style="font-size: 4rem; margin: 0; letter-spacing: 6px; text-transform: uppercase; color: {IRONLADY_COLORS['primary']};">IRON LADY</h1>
-            <p style="font-size: 1.5rem; margin: 15px 0 0 0; font-weight: 600; color: {IRONLADY_COLORS['secondary']};">Sales Performance Dashboard</p>
-            <p style="font-size: 1rem; margin: 10px 0 0 0; color: {IRONLADY_COLORS['secondary']}; opacity: 0.7;">Ultimate Complete Edition - v11.0</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="info-msg" style="text-align: center; font-size: 1.1rem;">
-        👋 <strong>Welcome, Team Leader!</strong><br/>
-        Select your profile to access your personalized dashboard
+    st.markdown(f"""
+    <div style="text-align: center; padding: 60px 20px; background: linear-gradient(135deg, {IRONLADY_COLORS['accent']} 0%, white 100%); border-radius: 20px; margin-bottom: 30px;">
+        <h1 style="font-size: 4rem; margin: 0; letter-spacing: 8px; color: {IRONLADY_COLORS['secondary']};">IRON LADY</h1>
+        <p style="font-size: 1.5rem; margin: 15px 0; font-weight: 600; color: {IRONLADY_COLORS['secondary']};">Sales Performance Dashboard</p>
+        <p style="font-size: 1rem; opacity: 0.7; color: {IRONLADY_COLORS['secondary']};">Select Your Profile to Continue</p>
     </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("<br/>", unsafe_allow_html=True)
-    
     st.markdown("### 👥 SELECT YOUR PROFILE")
     
-    cols = st.columns(2)
+    cols = st.columns(4)
     
     for idx, (name, info) in enumerate(TEAM_LEADERS.items()):
-        with cols[idx % 2]:
-            if st.button(
-                f"{info['icon']} {name}",
-                key=f"login_{name}",
-                use_container_width=True
-            ):
-                st.session_state.logged_in = True
-                st.session_state.current_user = name
-                st.session_state.user_role = info['role']
-                st.rerun()
-            
+        with cols[idx]:
             st.markdown(f"""
-            <div style="text-align: center; padding: 10px; background: white; border-radius: 10px; margin-top: 10px; border-left: 5px solid {info['color']}; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);">
-                <strong>{info['role']}</strong>
+            <div class="profile-card" style="border-color: {info['color']};">
+                <div style="font-size: 4rem; margin-bottom: 15px;">{info['icon']}</div>
+                <h3 style="margin: 10px 0; color: {info['color']};">{name}</h3>
+                <p style="margin: 5px 0; font-size: 0.9rem; opacity: 0.8; color: {IRONLADY_COLORS['secondary']};">{info['role']}</p>
             </div>
             """, unsafe_allow_html=True)
+            
+            if st.button(f"Login as {name}", key=f"login_{name}", use_container_width=True):
+                st.session_state.logged_in = True
+                st.session_state.current_user = name
+                st.session_state.user_data[name] = []
+                st.session_state.auto_loaded_sheets = False  # Reset auto-load flag
+                st.rerun()
+    
+    st.markdown("<br/><br/>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="info-msg" style="text-align: center;">
+        <strong>🔒 Secure Session Management</strong><br/>
+        Each team leader has individual dashboard access with isolated data storage
+    </div>
+    """, unsafe_allow_html=True)
 
 # ============================================
-# MAIN DASHBOARD (AFTER LOGIN)
+# MAIN DASHBOARD
 # ============================================
 
-def show_user_dashboard():
-    """Display complete dashboard after login"""
+def show_dashboard():
+    """Main dashboard for logged-in user"""
     
     user = st.session_state.current_user
-    role = st.session_state.user_role
     user_info = TEAM_LEADERS[user]
     
-    # Header with logout
-    col1, col2, col3 = st.columns([3, 2, 1])
+    # ============================================
+    # AUTO-LOAD GOOGLE SHEETS ON FIRST LOGIN
+    # ============================================
+    if st.session_state.use_google_sheets and st.session_state.sheet_id and not st.session_state.auto_loaded_sheets:
+        with st.spinner("🔄 Auto-loading Google Sheets data..."):
+            sheet_data, error = fetch_sheet_data(st.session_state.sheet_id)
+            if sheet_data:
+                loaded_data = parse_team_data(sheet_data, user)
+                if loaded_data:
+                    st.session_state.user_data[user] = loaded_data
+                    st.session_state.last_sheet_data = sheet_data
+                    st.session_state.auto_loaded_sheets = True
+                    st.success(f"✅ Auto-loaded {len(loaded_data)} entries from Google Sheets")
     
-    with col1:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, white 0%, {IRONLADY_COLORS['accent']} 100%); padding: 25px; border-radius: 15px; border-left: 8px solid {user_info['color']}; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);">
-            <h1 style="margin: 0; font-size: 2rem; border: none;">{user_info['icon']} Welcome, {user}!</h1>
-            <p style="margin: 5px 0 0 0; font-size: 1rem; opacity: 0.8;">{role}</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"""
-        <div style="background: white; padding: 25px; border-radius: 15px; border-left: 5px solid {IRONLADY_COLORS['primary']}; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); text-align: center;">
-            <p style="margin: 0; font-size: 0.9rem; opacity: 0.7;">Session: {st.session_state.selected_day}</p>
-            <p style="margin: 5px 0 0 0; font-size: 1.1rem; font-weight: 700;">{st.session_state.selected_date.strftime('%B %d, %Y')}</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        if st.button("🚪 LOGOUT", use_container_width=True, type="secondary"):
-            st.session_state.logged_in = False
-            st.session_state.current_user = None
-            st.session_state.user_role = None
-            st.rerun()
-    
-    st.markdown("<br/>", unsafe_allow_html=True)
-    
-    # Sidebar
+    # ============================================
+    # SIDEBAR
+    # ============================================
     with st.sidebar:
-        st.markdown(f"### {user_info['icon']} {user}")
-        st.markdown(f"**{role}**")
+        st.markdown(f"""
+        <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+            <div style="font-size: 3rem;">{user_info['icon']}</div>
+            <h3 style="margin: 10px 0; color: {user_info['color']};">{user}</h3>
+            <p style="margin: 0; font-size: 0.85rem; color: {IRONLADY_COLORS['secondary']};">{user_info['role']}</p>
+        </div>
+        """, unsafe_allow_html=True)
         
         st.markdown("---")
+        
+        # Session Settings
         st.markdown("### 📅 SESSION SETTINGS")
         
-        st.session_state.selected_day = st.selectbox(
+        session_date = st.date_input(
+            "Date",
+            value=st.session_state.session_date
+        )
+        st.session_state.session_date = session_date
+        
+        day_type = st.selectbox(
             "Day Type",
             options=['Day 1-1', 'Day 1', 'Day 2'],
-            index=['Day 1-1', 'Day 1', 'Day 2'].index(st.session_state.selected_day)
+            index=['Day 1-1', 'Day 1', 'Day 2'].index(st.session_state.day_type)
         )
-        
-        st.session_state.selected_date = st.date_input(
-            "Date",
-            value=st.session_state.selected_date
-        )
+        st.session_state.day_type = day_type
         
         st.markdown("---")
-        st.markdown("### 📊 DATA SOURCE")
         
-        st.session_state.use_google_sheets = st.checkbox(
-            "Use Google Sheets",
-            value=st.session_state.use_google_sheets
+        # Google Sheets Settings
+        st.markdown("### 📊 GOOGLE SHEETS")
+        
+        use_sheets = st.checkbox(
+            "Enable Google Sheets",
+            value=st.session_state.use_google_sheets,
+            help="Load data from Google Sheets"
         )
+        st.session_state.use_google_sheets = use_sheets
         
-        if st.session_state.use_google_sheets:
-            sheet_id = st.text_input("Sheet ID/URL", placeholder="1abc123xyz...")
+        if use_sheets:
+            sheet_id = st.text_input(
+                "Sheet ID/URL",
+                value=st.session_state.sheet_id,
+                placeholder="Paste Google Sheet ID or URL",
+                help="Example: 1abc123xyz... or full Google Sheets URL"
+            )
+            st.session_state.sheet_id = sheet_id
             
-            if st.button("🔄 Load from Sheets", use_container_width=True):
-                if sheet_id:
-                    data = fetch_sheet_data(sheet_id)
-                    if data:
-                        parsed = parse_google_sheets_for_user(data, user)
-                        if parsed is not None:
-                            st.session_state.rm_data_by_lead[user] = parsed
-                            st.success("✅ Data loaded!")
-                            st.rerun()
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("📥 Load", use_container_width=True):
+                    if sheet_id:
+                        with st.spinner("Loading..."):
+                            sheet_data, error = fetch_sheet_data(sheet_id)
+                            if sheet_data:
+                                loaded_data = parse_team_data(sheet_data, user)
+                                if loaded_data:
+                                    st.session_state.user_data[user] = loaded_data
+                                    st.session_state.last_sheet_data = sheet_data
+                                    st.success(f"✅ Loaded {len(loaded_data)} entries")
+                                    st.rerun()
+                                else:
+                                    st.warning("⚠️ No data found")
+                            else:
+                                st.error(f"❌ {error}")
+                    else:
+                        st.warning("⚠️ Enter Sheet ID")
+            
+            with col2:
+                if st.button("🔄 Refresh", use_container_width=True):
+                    if sheet_id:
+                        with st.spinner("Refreshing..."):
+                            sheet_data, error = fetch_sheet_data(sheet_id)
+                            if sheet_data:
+                                loaded_data = parse_team_data(sheet_data, user)
+                                if loaded_data:
+                                    st.session_state.user_data[user] = loaded_data
+                                    st.session_state.last_sheet_data = sheet_data
+                                    st.success("✅ Refreshed")
+                                    st.rerun()
+            
+            with st.expander("🔧 Setup Guide"):
+                st.markdown("""
+                **Required Setup:**
+                1. Create Google Cloud Project
+                2. Enable Google Sheets API
+                3. Create Service Account
+                4. Add credentials to secrets.toml
+                5. Share sheet with service account email
+                
+                **Secrets Format:**
+                ```toml
+                [gcp_service_account]
+                type = "service_account"
+                project_id = "your-project"
+                private_key = "-----BEGIN PRIVATE KEY-----\\n..."
+                client_email = "your-account@project.iam.gserviceaccount.com"
+                ...
+                ```
+                """)
+        else:
+            st.info("💡 Using Manual Data Entry mode")
         
         st.markdown("---")
         
-        current_data = get_current_user_data()
-        metrics = calculate_metrics(current_data)
-        
-        st.metric("Total RMs", metrics['total_rms'])
-        st.metric("Conversion", f"{metrics['conversion_rate']}%")
+        # Quick Stats
+        st.markdown("### 📊 QUICK STATS")
+        current_data = st.session_state.user_data.get(user, [])
+        if current_data:
+            total_rms = len(current_data)
+            total_pitches = sum(d['pitches_actual'] for d in current_data)
+            total_regs = sum(d['reg_actual'] for d in current_data)
+            st.metric("Total RMs", total_rms)
+            st.metric("Total Pitches", total_pitches)
+            st.metric("Total Registrations", total_regs)
+        else:
+            st.info("No data yet")
         
         st.markdown("---")
         
-        if st.button("🔄 Refresh", use_container_width=True):
+        # Logout
+        if st.button("🚪 Logout", use_container_width=True, type="primary"):
+            st.session_state.logged_in = False
+            st.session_state.current_user = None
+            st.session_state.auto_loaded_sheets = False
             st.rerun()
+        
+        st.markdown("---")
+        st.markdown(f"**🕐 Session Time**")
+        st.markdown(f"{datetime.now().strftime('%I:%M %p')}")
     
-    # Main tabs - ALL FEATURES
+    # ============================================
+    # MAIN HEADER
+    # ============================================
+    st.markdown(f"""
+    <div style="text-align: center; padding: 30px; background: linear-gradient(135deg, {IRONLADY_COLORS['accent']} 0%, white 100%); border-radius: 15px; margin-bottom: 30px; border: 3px solid {user_info['color']};">
+        <h1 style="font-size: 3rem; margin: 0; color: {IRONLADY_COLORS['secondary']};">Welcome, {user}! {user_info['icon']}</h1>
+        <p style="font-size: 1.2rem; margin: 10px 0; color: {IRONLADY_COLORS['secondary']};">{user_info['role']}</p>
+        <p style="font-size: 0.95rem; opacity: 0.7; color: {IRONLADY_COLORS['secondary']};">Session: {session_date.strftime('%B %d, %Y')} | {day_type}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # ============================================
+    # MAIN TABS
+    # ============================================
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📝 Data Entry",
         "📊 Performance Dashboard",
-        "📈 Google Sheets Viewer",
+        "📋 Google Sheets Viewer",
         "🤖 AI Analysis",
         "📧 Email Reports",
         "✅ Daily Checklist"
     ])
     
-    # TAB 1: MANUAL DATA ENTRY
+    # ============================================
+    # TAB 1: DATA ENTRY
+    # ============================================
     with tab1:
         st.markdown("### 📝 MANUAL DATA ENTRY")
-        
-        current_data = get_current_user_data()
-        
-        with st.expander("➕ ADD NEW RM ENTRY", expanded=True):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                rm_name = st.text_input("RM Name", key="new_rm_name")
-                total_rms = st.number_input("Total RMs", min_value=0, value=1, step=1, key="new_total_rms")
-                lead_count = st.number_input("Total Leads", min_value=0, value=0, step=1, key="new_lead_count")
-                target_pitch = st.number_input("Target Pitches", min_value=0, value=0, step=1, key="new_target_pitch")
-            
-            with col2:
-                actual_pitch = st.number_input("Actual Pitches", min_value=0, value=0, step=1, key="new_actual_pitch")
-                target_reg = st.number_input("Target Registrations", min_value=0, value=0, step=1, key="new_target_reg")
-                actual_reg = st.number_input("Actual Registrations", min_value=0, value=0, step=1, key="new_actual_reg")
-            
-            if st.button("✅ ADD ENTRY", use_container_width=True):
-                if rm_name and rm_name.strip():
-                    new_row = pd.DataFrame({
-                        'RM_Name': [rm_name],
-                        'Total_RMs': [total_rms],
-                        'Lead_Count': [lead_count],
-                        'Target_Pitch': [target_pitch],
-                        'Actual_Pitch': [actual_pitch],
-                        'Target_Registration': [target_reg],
-                        'Actual_Registration': [actual_reg]
-                    })
-                    
-                    current_data = current_data[current_data['RM_Name'] != '']
-                    updated_data = pd.concat([current_data, new_row], ignore_index=True)
-                    update_current_user_data(updated_data)
-                    st.success(f"✅ Added {rm_name}!")
-                    st.rerun()
-        
-        display_data = current_data[current_data['RM_Name'] != ''].copy()
-        if len(display_data) > 0:
-            st.markdown("### 📊 CURRENT ENTRIES")
-            st.dataframe(display_data, use_container_width=True, hide_index=True)
-    
-    # TAB 2: PERFORMANCE DASHBOARD
-    with tab2:
-        st.markdown("### 📊 PERFORMANCE OVERVIEW")
-        
-        current_data = get_current_user_data()
-        metrics = calculate_metrics(current_data)
-        
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        with col1:
-            st.metric("👥 Total RMs", metrics['total_rms'])
-        with col2:
-            st.metric("📞 Total Leads", metrics['total_leads'])
-        with col3:
-            st.metric("🎯 Pitch Achievement", f"{metrics['pitch_achievement']}%")
-        with col4:
-            st.metric("📝 Reg Achievement", f"{metrics['reg_achievement']}%")
-        with col5:
-            st.metric("💯 Conversion", f"{metrics['conversion_rate']}%")
-        
-        st.markdown("---")
-        
-        # Charts
-        display_df = current_data[current_data['RM_Name'] != ''].copy()
-        if len(display_df) > 0:
-            display_df['Conversion %'] = display_df.apply(
-                lambda row: round((row['Actual_Registration'] / row['Actual_Pitch'] * 100), 1) 
-                if row['Actual_Pitch'] > 0 else 0,
-                axis=1
-            )
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                fig = px.bar(display_df, x='RM_Name', y='Conversion %', title='RM-wise Conversion Rate')
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col2:
-                fig = go.Figure()
-                fig.add_trace(go.Bar(name='Pitch', x=display_df['RM_Name'], y=display_df['Actual_Pitch']))
-                fig.add_trace(go.Bar(name='Registration', x=display_df['RM_Name'], y=display_df['Actual_Registration']))
-                fig.update_layout(title='Pitches vs Registrations', barmode='group')
-                st.plotly_chart(fig, use_container_width=True)
-    
-    # TAB 3: GOOGLE SHEETS VIEWER
-    with tab3:
-        st.markdown("### 📈 GOOGLE SHEETS VIEWER")
-        
-        if st.session_state.loaded_sheet_data:
-            for sheet_name, df in st.session_state.loaded_sheet_data.items():
-                with st.expander(f"📋 {sheet_name}", expanded=True):
-                    st.dataframe(df, use_container_width=True)
-        else:
-            st.info("📊 No sheet data loaded. Enable 'Use Google Sheets' in sidebar and load data.")
-    
-    # TAB 4: AI ANALYSIS
-    with tab4:
-        st.markdown("### 🤖 AI INSIGHTS")
-        
-        current_data = get_current_user_data()
-        insights = analyze_performance(current_data)
-        
-        st.markdown(f"""
-        <div class="{'success' if insights['status'] == 'Excellent' else 'warning'}-msg" style="text-align: center;">
-            <h2 style="margin: 0; border: none;">{insights['status']}</h2>
+        st.markdown("""
+        <div class="info-msg">
+            ➕ <strong>Add New RM Entries</strong><br/>
+            Enter performance data for each RM in your team
         </div>
         """, unsafe_allow_html=True)
         
-        st.markdown("### 💡 RECOMMENDATIONS")
-        for rec in insights['recommendations']:
-            st.markdown(f'<div class="insight-box">{rec}</div>', unsafe_allow_html=True)
+        with st.form("data_entry_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                rm_name = st.text_input("RM Name *", placeholder="Enter RM name")
+                lead_count = st.number_input("Lead Count", min_value=0, value=0)
+                pitches_target = st.number_input("Target Pitches *", min_value=0, value=0)
+                pitches_actual = st.number_input("Actual Pitches *", min_value=0, value=0)
+            
+            with col2:
+                st.markdown("<br/>", unsafe_allow_html=True)
+                reg_target = st.number_input("Target Registrations *", min_value=0, value=0)
+                reg_actual = st.number_input("Actual Registrations *", min_value=0, value=0)
+            
+            submitted = st.form_submit_button("➕ Add Entry", use_container_width=True, type="primary")
+            
+            if submitted:
+                if rm_name and pitches_target > 0:
+                    new_entry = {
+                        'rm_name': rm_name,
+                        'total_rms': 1,
+                        'lead_count': lead_count,
+                        'pitches_target': pitches_target,
+                        'pitches_actual': pitches_actual,
+                        'reg_target': reg_target,
+                        'reg_actual': reg_actual,
+                    }
+                    
+                    if user not in st.session_state.user_data:
+                        st.session_state.user_data[user] = []
+                    
+                    st.session_state.user_data[user].append(new_entry)
+                    st.success(f"✅ Added entry for {rm_name}")
+                    st.rerun()
+                else:
+                    st.error("❌ Please fill required fields (RM Name, Target Pitches)")
+        
+        st.markdown("---")
+        
+        # Display current entries
+        st.markdown("### 📋 CURRENT ENTRIES")
+        
+        current_data = st.session_state.user_data.get(user, [])
+        
+        if current_data:
+            df_display = pd.DataFrame(current_data)
+            
+            # Add calculated columns
+            df_display['Pitch %'] = df_display.apply(
+                lambda x: f"{round(x['pitches_actual']/x['pitches_target']*100, 1)}%" if x['pitches_target'] > 0 else "0%",
+                axis=1
+            )
+            df_display['Reg %'] = df_display.apply(
+                lambda x: f"{round(x['reg_actual']/x['reg_target']*100, 1)}%" if x['reg_target'] > 0 else "0%",
+                axis=1
+            )
+            df_display['Conversion'] = df_display.apply(
+                lambda x: f"{round(x['reg_actual']/x['pitches_actual']*100, 1)}%" if x['pitches_actual'] > 0 else "0%",
+                axis=1
+            )
+            
+            display_cols = ['rm_name', 'lead_count', 'pitches_actual', 'Pitch %', 'reg_actual', 'Reg %', 'Conversion']
+            display_df = df_display[display_cols].copy()
+            display_df.columns = ['RM Name', 'Leads', 'Pitches', 'Pitch %', 'Registrations', 'Reg %', 'Conversion']
+            
+            st.dataframe(display_df, use_container_width=True, hide_index=True, height=400)
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("🗑️ Clear All Data", use_container_width=True):
+                    st.session_state.user_data[user] = []
+                    st.success("✅ All data cleared")
+                    st.rerun()
+            
+            with col2:
+                csv = display_df.to_csv(index=False)
+                st.download_button(
+                    "⬇️ Download CSV",
+                    data=csv,
+                    file_name=f"{user}_data_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            with col3:
+                json_str = df_display.to_json(orient='records', indent=2)
+                st.download_button(
+                    "⬇️ Download JSON",
+                    data=json_str,
+                    file_name=f"{user}_data_{datetime.now().strftime('%Y%m%d')}.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
+        else:
+            st.info("📝 No entries yet. Add your first RM entry above!")
     
+    # ============================================
+    # TAB 2: PERFORMANCE DASHBOARD
+    # ============================================
+    with tab2:
+        st.markdown("### 📊 PERFORMANCE DASHBOARD")
+        
+        current_data = st.session_state.user_data.get(user, [])
+        
+        if not current_data:
+            st.warning("⚠️ No data available. Add entries in the 'Data Entry' tab or load from Google Sheets.")
+        else:
+            df = pd.DataFrame(current_data)
+            
+            # Calculate metrics
+            total_rms = len(df)
+            total_leads = int(df['lead_count'].sum())
+            total_pitch_target = int(df['pitches_target'].sum())
+            total_pitch_actual = int(df['pitches_actual'].sum())
+            total_reg_target = int(df['reg_target'].sum())
+            total_reg_actual = int(df['reg_actual'].sum())
+            
+            pitch_achievement = round((total_pitch_actual / total_pitch_target * 100), 1) if total_pitch_target > 0 else 0
+            reg_achievement = round((total_reg_actual / total_reg_target * 100), 1) if total_reg_target > 0 else 0
+            conversion_rate = round((total_reg_actual / total_pitch_actual * 100), 1) if total_pitch_actual > 0 else 0
+            
+            # Key Metrics
+            col1, col2, col3, col4, col5 = st.columns(5)
+            
+            with col1:
+                st.metric("👥 Total RMs", total_rms)
+            
+            with col2:
+                st.metric("📞 Total Leads", total_leads)
+            
+            with col3:
+                st.metric("🎯 Pitch Achievement", f"{pitch_achievement}%")
+            
+            with col4:
+                st.metric("📝 Reg Achievement", f"{reg_achievement}%")
+            
+            with col5:
+                conv_status = "🟢" if conversion_rate >= 75 else "🟡" if conversion_rate >= 60 else "🔴"
+                st.metric("💯 Conversion Rate", f"{conv_status} {conversion_rate}%")
+            
+            st.markdown("---")
+            
+            # Calculate individual conversions
+            df['conversion'] = df.apply(
+                lambda x: round((x['reg_actual'] / x['pitches_actual'] * 100), 1) if x['pitches_actual'] > 0 else 0,
+                axis=1
+            )
+            
+            # Visualizations
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("#### 💯 RM-wise Conversion Rate")
+                fig1 = px.bar(
+                    df,
+                    x='rm_name',
+                    y='conversion',
+                    color='conversion',
+                    color_continuous_scale=['#D62828', '#F77F00', '#2A9D8F'],
+                    labels={'rm_name': 'RM Name', 'conversion': 'Conversion %'},
+                    text='conversion'
+                )
+                fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                fig1.update_layout(showlegend=False, height=400, xaxis_title="", yaxis_title="Conversion %")
+                st.plotly_chart(fig1, use_container_width=True)
+            
+            with col2:
+                st.markdown("#### 🎯 Pitch vs Registration")
+                fig2 = go.Figure()
+                fig2.add_trace(go.Bar(
+                    name='Pitches',
+                    x=df['rm_name'],
+                    y=df['pitches_actual'],
+                    marker_color=IRONLADY_COLORS['success'],
+                    text=df['pitches_actual'],
+                    textposition='outside'
+                ))
+                fig2.add_trace(go.Bar(
+                    name='Registrations',
+                    x=df['rm_name'],
+                    y=df['reg_actual'],
+                    marker_color=IRONLADY_COLORS['primary'],
+                    text=df['reg_actual'],
+                    textposition='outside'
+                ))
+                fig2.update_layout(barmode='group', height=400, xaxis_title="", yaxis_title='Count')
+                st.plotly_chart(fig2, use_container_width=True)
+            
+            # Gauge Chart
+            st.markdown("#### 🎯 Overall Conversion Rate Gauge")
+            fig3 = go.Figure(go.Indicator(
+                mode="gauge+number+delta",
+                value=conversion_rate,
+                domain={'x': [0, 1], 'y': [0, 1]},
+                title={'text': "Team Conversion Rate", 'font': {'size': 24}},
+                delta={'reference': 75, 'increasing': {'color': "green"}},
+                gauge={
+                    'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
+                    'bar': {'color': IRONLADY_COLORS['primary']},
+                    'bgcolor': "white",
+                    'borderwidth': 2,
+                    'bordercolor': "gray",
+                    'steps': [
+                        {'range': [0, 60], 'color': '#f8d7da'},
+                        {'range': [60, 75], 'color': '#fff3cd'},
+                        {'range': [75, 100], 'color': '#d4edda'}
+                    ],
+                    'threshold': {
+                        'line': {'color': "red", 'width': 4},
+                        'thickness': 0.75,
+                        'value': 75
+                    }
+                }
+            ))
+            fig3.update_layout(height=400)
+            st.plotly_chart(fig3, use_container_width=True)
+            
+            # Pie Chart
+            st.markdown("#### 🥧 Registration Distribution")
+            fig4 = px.pie(
+                df,
+                values='reg_actual',
+                names='rm_name',
+                color_discrete_sequence=px.colors.sequential.RdBu
+            )
+            fig4.update_traces(textposition='inside', textinfo='percent+label')
+            fig4.update_layout(height=400)
+            st.plotly_chart(fig4, use_container_width=True)
+    
+    # ============================================
+    # TAB 3: GOOGLE SHEETS VIEWER
+    # ============================================
+    with tab3:
+        st.markdown("### 📋 GOOGLE SHEETS VIEWER")
+        
+        st.markdown("""
+        <div class="info-msg">
+            📊 <strong>View Live Data from Google Sheets</strong><br/>
+            Connect to your Google Sheet to display real-time data
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if not st.session_state.use_google_sheets or not st.session_state.sheet_id:
+            st.warning("⚠️ Enable Google Sheets and enter Sheet ID in the sidebar to use this feature")
+        else:
+            if st.button("🔄 Refresh Sheet Data", use_container_width=False):
+                with st.spinner("Loading from Google Sheets..."):
+                    sheet_data, error = fetch_sheet_data(st.session_state.sheet_id)
+                    if sheet_data:
+                        st.session_state.last_sheet_data = sheet_data
+                        st.success("✅ Data loaded successfully!")
+                        
+                        for sheet_name, df_sheet in sheet_data.items():
+                            with st.expander(f"📄 {sheet_name}", expanded=True):
+                                st.dataframe(df_sheet, use_container_width=True, height=400)
+                    else:
+                        st.error(f"❌ {error}")
+            
+            # Show last loaded data
+            if st.session_state.last_sheet_data:
+                st.markdown("---")
+                st.markdown("### 📊 LOADED SHEETS")
+                for sheet_name, df_sheet in st.session_state.last_sheet_data.items():
+                    with st.expander(f"📄 {sheet_name}", expanded=False):
+                        st.dataframe(df_sheet, use_container_width=True, height=400)
+    
+    # ============================================
+    # TAB 4: AI ANALYSIS
+    # ============================================
+    with tab4:
+        st.markdown("### 🤖 AI-POWERED ANALYSIS")
+        
+        current_data = st.session_state.user_data.get(user, [])
+        
+        if not current_data:
+            st.warning("⚠️ No data available for analysis. Add entries first.")
+        else:
+            df = pd.DataFrame(current_data)
+            
+            with st.spinner("🧠 Analyzing performance data..."):
+                insights = analyze_team_performance(df)
+            
+            # Performance Status
+            avg_conv = insights['avg_conversion']
+            if avg_conv >= 75:
+                status_msg = "Excellent"
+                status_color = "success"
+                status_icon = "✅"
+            elif avg_conv >= 60:
+                status_msg = "Good"
+                status_color = "warning"
+                status_icon = "⚠️"
+            else:
+                status_msg = "Needs Improvement"
+                status_color = "error"
+                status_icon = "❌"
+            
+            st.markdown(f"""
+            <div class="{status_color}-msg" style="text-align: center;">
+                <h2 style="margin: 0; border: none;">{status_icon} {status_msg}</h2>
+                <p style="font-size: 1.2rem; margin: 10px 0 0 0;">Team Average Conversion: {avg_conv}%</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Key Metrics
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("👥 Total RMs", insights['total_rms'])
+            
+            with col2:
+                st.metric("📞 Total Pitches", insights['total_pitches'])
+            
+            with col3:
+                st.metric("📝 Total Registrations", insights['total_registrations'])
+            
+            st.markdown("---")
+            
+            # Top & Bottom Performers
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### ⭐ TOP PERFORMER")
+                if insights['best_performer']:
+                    bp = insights['best_performer']
+                    st.markdown(f"""
+                    <div class="success-msg">
+                        <h3 style="margin: 0 0 10px 0; border: none;">🏆 {bp['name']}</h3>
+                        <strong>Conversion Rate:</strong> {bp['conversion']}%<br/>
+                        <strong>Status:</strong> Outstanding Performance
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown("### 📉 NEEDS SUPPORT")
+                if insights['needs_support']:
+                    ns = insights['needs_support']
+                    st.markdown(f"""
+                    <div class="warning-msg">
+                        <h3 style="margin: 0 0 10px 0; border: none;">🎯 {ns['name']}</h3>
+                        <strong>Conversion Rate:</strong> {ns['conversion']}%<br/>
+                        <strong>Action:</strong> Provide coaching
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Recommendations
+            st.markdown("### 💡 STRATEGIC RECOMMENDATIONS")
+            for idx, rec in enumerate(insights['recommendations'], 1):
+                st.markdown(f"""
+                <div class="insight-box">
+                    <strong>#{idx}:</strong> {rec}
+                </div>
+                """, unsafe_allow_html=True)
+    
+    # ============================================
     # TAB 5: EMAIL REPORTS
+    # ============================================
     with tab5:
         st.markdown("### 📧 EMAIL REPORTS")
         
-        col1, col2 = st.columns([3, 1])
+        current_data = st.session_state.user_data.get(user, [])
+        
+        if not current_data:
+            st.warning("⚠️ No data available to send. Add entries first.")
+        else:
+            st.markdown("""
+            <div class="info-msg">
+                📨 <strong>Send Professional Reports</strong><br/>
+                Email comprehensive performance reports to multiple recipients
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Check email config
+            email_configured = all([
+                "email_sender" in st.secrets,
+                "email_password" in st.secrets,
+                "email_smtp_server" in st.secrets,
+                "email_smtp_port" in st.secrets
+            ])
+            
+            if not email_configured:
+                st.markdown("""
+                <div class="warning-msg">
+                    ⚠️ <strong>Email Not Configured</strong><br/>
+                    Add email settings to your .streamlit/secrets.toml file:<br/><br/>
+                    <code>
+                    email_sender = "your-email@gmail.com"<br/>
+                    email_password = "your-app-password"<br/>
+                    email_smtp_server = "smtp.gmail.com"<br/>
+                    email_smtp_port = "587"
+                    </code>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                with st.expander("📖 Email Setup Guide"):
+                    st.markdown("""
+                    ### Gmail Setup (Recommended)
+                    
+                    1. **Enable 2-Factor Authentication** on your Gmail account
+                    2. Go to: https://myaccount.google.com/apppasswords
+                    3. Select "Mail" and your device
+                    4. **Copy the 16-character app password**
+                    5. Add to secrets.toml:
+                    
+                    ```toml
+                    email_sender = "your-email@gmail.com"
+                    email_password = "your-16-char-app-password"
+                    email_smtp_server = "smtp.gmail.com"
+                    email_smtp_port = "587"
+                    ```
+                    
+                    ### Other Email Providers
+                    
+                    **Outlook/Hotmail:**
+                    - SMTP Server: smtp-mail.outlook.com
+                    - Port: 587
+                    
+                    **Yahoo:**
+                    - SMTP Server: smtp.mail.yahoo.com
+                    - Port: 587
+                    
+                    **Office 365:**
+                    - SMTP Server: smtp.office365.com
+                    - Port: 587
+                    """)
+            else:
+                st.markdown("""
+                <div class="success-msg">
+                    ✅ <strong>Email Configured</strong><br/>
+                    Ready to send reports
+                </div>
+                """, unsafe_allow_html=True)
+            
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                recipient_emails = st.text_area(
+                    "Recipient Emails (comma or newline separated)",
+                    placeholder="manager@company.com, supervisor@company.com",
+                    height=100
+                )
+                
+                subject = st.text_input(
+                    "Email Subject",
+                    value=f"Performance Report - {user} - {datetime.now().strftime('%B %d, %Y')}"
+                )
+            
+            with col2:
+                st.markdown("<br/>", unsafe_allow_html=True)
+                if st.button("📧 SEND EMAIL", use_container_width=True, type="primary", disabled=not email_configured):
+                    if recipient_emails:
+                        emails = [e.strip() for e in recipient_emails.replace(',', '\n').split('\n') if e.strip()]
+                        
+                        if emails:
+                            with st.spinner("📤 Sending email..."):
+                                df = pd.DataFrame(current_data)
+                                insights = analyze_team_performance(df)
+                                
+                                success, message = send_email_report(emails, subject, df, insights, user)
+                                
+                                if success:
+                                    st.success(f"✅ {message}")
+                                    st.balloons()
+                                else:
+                                    st.error(f"❌ {message}")
+                        else:
+                            st.error("❌ Enter at least one valid email")
+                    else:
+                        st.error("❌ Enter recipient emails")
+    
+    # ============================================
+    # TAB 6: DAILY CHECKLIST
+    # ============================================
+    with tab6:
+        st.markdown(f"### ✅ DAILY CHECKLIST - {day_type}")
+        
+        st.markdown(f"""
+        <div class="info-msg">
+            📋 <strong>Complete Your Daily Tasks</strong><br/>
+            Session: {session_date.strftime('%B %d, %Y')} | {day_type}<br/>
+            Track your progress and ensure all activities are completed
+        </div>
+        """, unsafe_allow_html=True)
+        
+        checklist = DAILY_CHECKLISTS.get(day_type, [])
+        
+        # Initialize checklist completion
+        checklist_key = f"{user}_{day_type}_{session_date.strftime('%Y%m%d')}"
+        if checklist_key not in st.session_state.checklist_completion:
+            st.session_state.checklist_completion[checklist_key] = [False] * len(checklist)
+        
+        completed = st.session_state.checklist_completion[checklist_key]
+        total_tasks = len(checklist)
+        completed_tasks = sum(completed)
+        completion_percentage = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
+        
+        # Progress Bar
+        st.markdown(f"""
+        <div class="metric">
+            <strong>Progress:</strong> {completed_tasks}/{total_tasks} tasks ({completion_percentage}%)<br/>
+            <div style="background: #e0e0e0; border-radius: 10px; height: 25px; margin-top: 10px;">
+                <div style="background: {IRONLADY_COLORS['primary']}; height: 100%; border-radius: 10px; width: {completion_percentage}%;"></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Display checklist items
+        for idx, item in enumerate(checklist):
+            priority_color = 'badge-high' if item['priority'] == 'High' else 'badge-medium'
+            
+            type_icons = {
+                'Upload': '📤',
+                'Manual': '✋',
+                'Ongoing': '🔄',
+                'Checkbox': '☑️',
+                'Text': '📝'
+            }
+            type_icon = type_icons.get(item['type'], '📋')
+            
+            col1, col2 = st.columns([0.1, 0.9])
+            
+            with col1:
+                is_checked = st.checkbox(
+                    "",
+                    value=completed[idx],
+                    key=f"check_{checklist_key}_{idx}"
+                )
+                st.session_state.checklist_completion[checklist_key][idx] = is_checked
+            
+            with col2:
+                st.markdown(f"""
+                <div class="checklist-item">
+                    <span class="badge {priority_color}">🔴 {item['priority']}</span>
+                    <span class="badge" style="background: #2A9D8F; color: white;">{type_icon} {item['type']}</span>
+                    <br/>
+                    <strong style="font-size: 1.05rem; {'text-decoration: line-through; opacity: 0.6;' if is_checked else ''}">{item['task']}</strong>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Action Buttons
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            recipient_emails = st.text_area(
-                "Recipient Emails (comma or newline separated)",
-                placeholder="manager@company.com, team@company.com",
-                height=100
-            )
+            if st.button("🔄 Reset Checklist", use_container_width=True):
+                st.session_state.checklist_completion[checklist_key] = [False] * len(checklist)
+                st.rerun()
         
         with col2:
-            st.markdown("<br/><br/>", unsafe_allow_html=True)
-            if st.button("📧 SEND REPORT", use_container_width=True, type="primary"):
-                if recipient_emails:
-                    emails = [e.strip() for e in recipient_emails.replace(',', '\n').split('\n') if e.strip()]
-                    if emails:
-                        current_data = get_current_user_data()
-                        insights = analyze_performance(current_data)
-                        success, message = send_email_report(
-                            emails,
-                            f"Iron Lady Report - {user} - {datetime.now().strftime('%B %d, %Y')}",
-                            current_data,
-                            insights
-                        )
-                        if success:
-                            st.success(f"✅ Sent to {len(emails)} recipient(s)!")
-                            st.balloons()
-                        else:
-                            st.error(f"❌ {message}")
+            if st.button("✅ Mark All Complete", use_container_width=True):
+                st.session_state.checklist_completion[checklist_key] = [True] * len(checklist)
+                st.rerun()
+        
+        with col3:
+            if completion_percentage == 100:
+                st.success("🎉 All tasks completed!")
     
-    # TAB 6: DAILY CHECKLIST
-    with tab6:
-        st.markdown("### ✅ DAILY ACTIVITY CHECKLIST")
-        
-        selected_checklist = CHECKLIST_ITEMS.get(st.session_state.selected_day, [])
-        
-        if selected_checklist and selected_checklist[0].get('time'):
-            st.markdown(f'<div class="info-msg">⏰ <strong>Session Time:</strong> {selected_checklist[0]["time"]}</div>', unsafe_allow_html=True)
-        
-        # Group by priority
-        high_priority = [item for item in selected_checklist if item.get('priority') == 'high']
-        medium_priority = [item for item in selected_checklist if item.get('priority') == 'medium']
-        
-        if high_priority:
-            st.markdown("#### 🔴 HIGH PRIORITY TASKS")
-            for idx, item in enumerate(high_priority):
-                task = item['task']
-                item_type = item.get('type', 'checkbox')
-                
-                badge = ""
-                if item_type == 'upload':
-                    badge = '<span class="badge badge-upload">📤 UPLOAD</span>'
-                elif item_type == 'manual':
-                    badge = '<span class="badge badge-manual">✋ MANUAL</span>'
-                elif item_type == 'ongoing':
-                    badge = '<span class="badge badge-ongoing">🔄 ONGOING</span>'
-                
-                col1, col2 = st.columns([5, 1])
-                with col1:
-                    checked = st.checkbox(task, key=f"high_{idx}_{st.session_state.selected_day}")
-                    st.session_state.checklist[task] = checked
-                with col2:
-                    if badge:
-                        st.markdown(badge, unsafe_allow_html=True)
-        
-        if medium_priority:
-            st.markdown("---")
-            st.markdown("#### 🟡 MEDIUM PRIORITY TASKS")
-            for idx, item in enumerate(medium_priority):
-                st.checkbox(item['task'], key=f"med_{idx}_{st.session_state.selected_day}")
-        
-        # Progress
-        st.markdown("---")
-        task_names = [item['task'] for item in selected_checklist]
-        checked_count = sum(1 for task in task_names if st.session_state.checklist.get(task, False))
-        progress = checked_count / len(task_names) * 100 if task_names else 0
-        
-        st.progress(progress / 100, text=f"{progress:.0f}% Complete ({checked_count}/{len(task_names)})")
-    
-    # Footer
+    # ============================================
+    # FOOTER
+    # ============================================
     st.markdown("---")
     st.markdown(f"""
     <div style="text-align: center; padding: 30px; background: linear-gradient(135deg, {IRONLADY_COLORS['secondary']} 0%, {IRONLADY_COLORS['primary']} 100%); border-radius: 15px; color: white;">
         <p style="margin: 0; font-weight: 900; font-size: 1.5rem;">IRON LADY</p>
-        <p style="margin: 10px 0 0 0;">Ultimate Complete Edition - v11.0</p>
-        <p style="margin: 10px 0 0 0;">Logged in as: <strong>{user}</strong> ({role})</p>
-        <p style="margin: 15px 0 0 0; font-size: 0.85rem; opacity: 0.7;">Team: Ghazala 🏆 | Megha 🏆 | Afreen 🌟 | Soumya 🌟</p>
+        <p style="margin: 10px 0 0 0;">Sales Performance Management System</p>
+        <p style="margin: 10px 0 0 0; font-size: 0.9rem;">Team: Ghazala 🏆 | Megha 🏆 | Afreen 🌟 | Soumya 🌟</p>
+        <p style="margin: 15px 0 0 0; font-size: 0.85rem; opacity: 0.7;">© 2024 Iron Lady | v11.0 Complete Fixed Edition</p>
     </div>
     """, unsafe_allow_html=True)
 
 # ============================================
-# MAIN APP ROUTING
+# MAIN APP
 # ============================================
 
 def main():
-    """Main application router"""
+    init_session_state()
     
     if not st.session_state.logged_in:
         show_login_page()
     else:
-        show_user_dashboard()
+        show_dashboard()
 
 if __name__ == "__main__":
     main()

@@ -158,6 +158,28 @@ st.markdown(f"""
         color: white !important;
     }}
     
+    [data-testid="stSidebar"] label {{
+        color: white !important;
+        font-weight: 600 !important;
+    }}
+    
+    [data-testid="stSidebar"] .stTextInput label,
+    [data-testid="stSidebar"] .stSelectbox label,
+    [data-testid="stSidebar"] .stDateInput label {{
+        color: white !important;
+        font-size: 0.95rem !important;
+    }}
+    
+    [data-testid="stSidebar"] input {{
+        color: {IRONLADY_COLORS['secondary']} !important;
+        background: white !important;
+    }}
+    
+    [data-testid="stSidebar"] .stCheckbox label {{
+        color: white !important;
+        font-size: 1rem !important;
+    }}
+    
     .stButton > button {{
         background: {IRONLADY_COLORS['primary']};
         color: white;
@@ -699,9 +721,16 @@ def show_dashboard():
         # Google Sheets Settings
         st.markdown("### 📊 DATA SOURCE")
         
+        st.markdown("""
+        <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+            <small>⚠️ Google Sheets requires setup. Use <strong>Manual Data Entry</strong> tab if you don't have sheets configured.</small>
+        </div>
+        """, unsafe_allow_html=True)
+        
         use_sheets = st.checkbox(
             "Use Google Sheets",
-            value=st.session_state.use_google_sheets
+            value=st.session_state.use_google_sheets,
+            help="Enable only if you have configured Google Sheets API credentials"
         )
         st.session_state.use_google_sheets = use_sheets
         
@@ -709,7 +738,8 @@ def show_dashboard():
             sheet_id = st.text_input(
                 "Sheet ID/URL",
                 value=st.session_state.sheet_id,
-                placeholder="Paste Google Sheet ID or URL"
+                placeholder="Paste Google Sheet ID or URL",
+                help="Example: 1abc123xyz... or full Google Sheets URL"
             )
             st.session_state.sheet_id = sheet_id
             
@@ -726,9 +756,22 @@ def show_dashboard():
                             else:
                                 st.warning("⚠️ No data found for your team")
                         else:
-                            st.error("❌ Failed to load sheet")
+                            st.error("❌ Failed to load sheet. Check configuration or use Manual Data Entry instead.")
                 else:
                     st.warning("⚠️ Enter Sheet ID first")
+            
+            with st.expander("🔧 Google Sheets Setup Guide"):
+                st.markdown("""
+                **Required Setup:**
+                1. Create a Google Cloud Project
+                2. Enable Google Sheets API
+                3. Create Service Account credentials
+                4. Add credentials to `.streamlit/secrets.toml`
+                
+                **Alternative:** Use the **Data Entry** tab to manually add data without Google Sheets!
+                """)
+        else:
+            st.info("💡 Using Manual Data Entry mode")
         
         st.markdown("---")
         

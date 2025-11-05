@@ -26,15 +26,25 @@ EMAIL_SMTP_PORT = 587  # Fixed for Gmail
 CEO_EMAIL = os.getenv('CEO_EMAIL', '').strip()
 AUTO_MAIL = os.getenv('AUTO_MAIL', '').strip()
 
-# Combine all recipient emails
+# Clean and combine all recipient emails (handle newlines, commas, spaces)
 recipient_list = []
-if CEO_EMAIL:
-    recipient_list.extend([email.strip() for email in CEO_EMAIL.split(',') if email.strip()])
-if AUTO_MAIL:
-    recipient_list.extend([email.strip() for email in AUTO_MAIL.split(',') if email.strip()])
 
-# Remove duplicates
-RECIPIENT_EMAILS = list(set(recipient_list))
+if CEO_EMAIL:
+    # Replace newlines and multiple spaces with single space
+    cleaned = CEO_EMAIL.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
+    # Split by comma and/or whitespace
+    emails = [email.strip() for email in cleaned.replace(',', ' ').split() if email.strip() and '@' in email]
+    recipient_list.extend(emails)
+
+if AUTO_MAIL:
+    # Replace newlines and multiple spaces with single space
+    cleaned = AUTO_MAIL.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
+    # Split by comma and/or whitespace
+    emails = [email.strip() for email in cleaned.replace(',', ' ').split() if email.strip() and '@' in email]
+    recipient_list.extend(emails)
+
+# Remove duplicates and invalid emails
+RECIPIENT_EMAILS = list(set([email for email in recipient_list if email and '@' in email and '.' in email]))
 
 # Iron Lady Colors
 IRONLADY_COLORS = {

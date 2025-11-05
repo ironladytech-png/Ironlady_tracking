@@ -1,6 +1,6 @@
 """
 IRON LADY - Email Automation Script for GitHub Actions
-Sends daily branded email reports without Streamlit dependency
+Uses your existing secret names: GMAIL_USER, GMAIL_APP_PASSWORD, CEO_EMAIL, AUTO_MAIL
 """
 
 import pandas as pd
@@ -10,19 +10,31 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 import os
 import sys
+import json
 
 # ============================================
-# CONFIGURATION
+# CONFIGURATION - USING YOUR SECRET NAMES
 # ============================================
 
-# Email configuration from environment variables (GitHub Secrets)
-EMAIL_SENDER = os.getenv('EMAIL_SENDER')
-EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
-EMAIL_SMTP_SERVER = os.getenv('EMAIL_SMTP_SERVER', 'smtp.gmail.com')
-EMAIL_SMTP_PORT = int(os.getenv('EMAIL_SMTP_PORT', '587'))
+# Email configuration - using YOUR existing secret names
+EMAIL_SENDER = os.getenv('GMAIL_USER', '').strip()
+EMAIL_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', '').strip()
+EMAIL_SMTP_SERVER = 'smtp.gmail.com'  # Fixed for Gmail
+EMAIL_SMTP_PORT = 587  # Fixed for Gmail
 
-# Recipients
-RECIPIENT_EMAILS = os.getenv('RECIPIENT_EMAILS', '').split(',')
+# Recipients - using YOUR secret names
+CEO_EMAIL = os.getenv('CEO_EMAIL', '').strip()
+AUTO_MAIL = os.getenv('AUTO_MAIL', '').strip()
+
+# Combine all recipient emails
+recipient_list = []
+if CEO_EMAIL:
+    recipient_list.extend([email.strip() for email in CEO_EMAIL.split(',') if email.strip()])
+if AUTO_MAIL:
+    recipient_list.extend([email.strip() for email in AUTO_MAIL.split(',') if email.strip()])
+
+# Remove duplicates
+RECIPIENT_EMAILS = list(set(recipient_list))
 
 # Iron Lady Colors
 IRONLADY_COLORS = {
@@ -33,53 +45,51 @@ IRONLADY_COLORS = {
 }
 
 # ============================================
-# GOOGLE SHEETS CONNECTION (Optional)
+# GOOGLE SHEETS CONNECTION
 # ============================================
 
 def get_data_from_sheets():
     """
-    Fetch data from Google Sheets
-    Returns sample data if Google Sheets not configured
+    Fetch data from Google Sheets using GOOGLE_SHEETS_CREDENTIALS
+    Returns sample data if not configured
     """
     try:
         import gspread
         from google.oauth2.service_account import Credentials
         
-        # Get credentials from environment
-        credentials_dict = {
-            "type": os.getenv("GCP_TYPE"),
-            "project_id": os.getenv("GCP_PROJECT_ID"),
-            "private_key_id": os.getenv("GCP_PRIVATE_KEY_ID"),
-            "private_key": os.getenv("GCP_PRIVATE_KEY", "").replace('\\n', '\n'),
-            "client_email": os.getenv("GCP_CLIENT_EMAIL"),
-            "client_id": os.getenv("GCP_CLIENT_ID"),
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "client_x509_cert_url": os.getenv("GCP_CLIENT_CERT_URL")
-        }
+        # Get credentials from environment (your GOOGLE_SHEETS_CREDENTIALS secret)
+        credentials_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS", "").strip()
         
-        credentials = Credentials.from_service_account_info(
-            credentials_dict,
-            scopes=[
-                'https://www.googleapis.com/auth/spreadsheets.readonly',
-                'https://www.googleapis.com/auth/drive.readonly'
-            ]
-        )
-        
-        client = gspread.authorize(credentials)
-        sheet_id = os.getenv('GOOGLE_SHEET_ID')
-        
-        if sheet_id:
-            spreadsheet = client.open_by_key(sheet_id)
-            worksheet = spreadsheet.sheet1
-            data = worksheet.get_all_records()
-            return pd.DataFrame(data)
+        if credentials_json:
+            # Parse JSON credentials
+            credentials_dict = json.loads(credentials_json)
+            
+            credentials = Credentials.from_service_account_info(
+                credentials_dict,
+                scopes=[
+                    'https://www.googleapis.com/auth/spreadsheets.readonly',
+                    'https://www.googleapis.com/auth/drive.readonly'
+                ]
+            )
+            
+            client = gspread.authorize(credentials)
+            sheet_id = os.getenv('GOOGLE_SHEET_ID', '').strip()
+            
+            if sheet_id:
+                print(f"📊 Connecting to Google Sheet: {sheet_id}")
+                spreadsheet = client.open_by_key(sheet_id)
+                worksheet = spreadsheet.sheet1
+                data = worksheet.get_all_records()
+                
+                if data:
+                    print(f"✅ Loaded {len(data)} rows from Google Sheets")
+                    return pd.DataFrame(data)
     
     except Exception as e:
         print(f"⚠️ Could not fetch from Google Sheets: {e}")
+        print("📝 Using sample data instead...")
     
-    # Return sample data
+    # Return sample data if Google Sheets fails
     return pd.DataFrame({
         'Team_Leader': ['Ghazala', 'Megha', 'Afreen', 'Soumya'],
         'Total_RMs': [8, 7, 5, 6],
@@ -286,44 +296,98 @@ def main():
     
     print("🚀 Iron Lady Email Automation Starting...")
     print(f"📅 Date: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
+    print("\n" + "="*60)
+    print("⚙️  CONFIGURATION CHECK")
+    print("="*60)
+    print(f"📧 GMAIL_USER (sender): {'✅ Set' if EMAIL_SENDER else '❌ Missing'}")
+    if EMAIL_SENDER:
+        print(f"   → {EMAIL_SENDER}")
+    print(f"🔑 GMAIL_APP_PASSWORD: {'✅ Set' if EMAIL_PASSWORD else '❌ Missing'}")
+    if EMAIL_PASSWORD:
+        print(f"   → {'*' * len(EMAIL_PASSWORD)} (hidden)")
+    print(f"📬 CEO_EMAIL: {'✅ Set' if CEO_EMAIL else '❌ Missing'}")
+    if CEO_EMAIL:
+        print(f"   → {CEO_EMAIL}")
+    print(f"📬 AUTO_MAIL: {'✅ Set' if AUTO_MAIL else '❌ Missing'}")
+    if AUTO_MAIL:
+        print(f"   → {AUTO_MAIL}")
+    print(f"📮 Combined Recipients: {'✅ ' + str(len(RECIPIENT_EMAILS)) + ' email(s)' if RECIPIENT_EMAILS else '❌ None'}")
+    if RECIPIENT_EMAILS:
+        for email in RECIPIENT_EMAILS:
+            print(f"   → {email}")
+    print(f"🌐 SMTP Server: {EMAIL_SMTP_SERVER}:{EMAIL_SMTP_PORT}")
+    print("="*60)
     
-    # Check configuration
-    if not EMAIL_SENDER or not EMAIL_PASSWORD:
-        print("❌ ERROR: Email credentials not configured")
-        print("Please set EMAIL_SENDER and EMAIL_PASSWORD in GitHub Secrets")
+    # Validate configuration
+    errors = []
+    
+    if not EMAIL_SENDER:
+        errors.append("❌ GMAIL_USER not set")
+    
+    if not EMAIL_PASSWORD:
+        errors.append("❌ GMAIL_APP_PASSWORD not set")
+    
+    if not RECIPIENT_EMAILS:
+        errors.append("❌ No recipient emails (CEO_EMAIL or AUTO_MAIL)")
+    
+    if errors:
+        print("\n🚨 CONFIGURATION ERRORS:")
+        for error in errors:
+            print(f"   {error}")
+        print("\n💡 SOLUTIONS:")
+        print("   1. Go to: Settings → Secrets and variables → Actions")
+        print("   2. Make sure these secrets are set:")
+        print("      - GMAIL_USER (your Gmail address)")
+        print("      - GMAIL_APP_PASSWORD (16-char app password)")
+        print("      - CEO_EMAIL or AUTO_MAIL (recipient email addresses)")
+        print("\n📖 See GITHUB_SECRETS_FIX.md for detailed instructions")
         sys.exit(1)
     
-    if not RECIPIENT_EMAILS or RECIPIENT_EMAILS == ['']:
-        print("❌ ERROR: No recipient emails configured")
-        print("Please set RECIPIENT_EMAILS in GitHub Secrets")
-        sys.exit(1)
-    
-    print(f"📧 Email Sender: {EMAIL_SENDER}")
-    print(f"📬 Recipients: {', '.join(RECIPIENT_EMAILS)}")
+    print("\n✅ All configuration validated!")
     
     # Get data
-    print("\n📊 Fetching data...")
+    print("\n" + "="*60)
+    print("📊 FETCHING DATA")
+    print("="*60)
     df = get_data_from_sheets()
-    print(f"✅ Data loaded: {len(df)} team leaders")
+    print(f"✅ Data ready: {len(df)} team leaders")
     
     # Create email
-    print("\n📝 Creating email...")
+    print("\n" + "="*60)
+    print("📝 CREATING EMAIL")
+    print("="*60)
     subject = f"Iron Lady Daily Report - {datetime.now().strftime('%B %d, %Y')}"
     html_body = create_email_html(df)
     print("✅ Email HTML created")
     
     # Send email
-    print("\n📤 Sending email...")
+    print("\n" + "="*60)
+    print("📤 SENDING EMAIL")
+    print("="*60)
+    print(f"From: {EMAIL_SENDER}")
+    print(f"To: {', '.join(RECIPIENT_EMAILS)}")
+    print(f"Subject: {subject}")
+    
     success, message = send_email(RECIPIENT_EMAILS, subject, html_body)
     
+    print("\n" + "="*60)
     if success:
-        print(f"✅ {message}")
-        print(f"📧 Sent to: {', '.join(RECIPIENT_EMAILS)}")
+        print("✅ SUCCESS!")
+        print("="*60)
+        print(f"📧 Email sent to {len(RECIPIENT_EMAILS)} recipient(s):")
+        for email in RECIPIENT_EMAILS:
+            print(f"   ✓ {email}")
+        print("\n🎉 Email automation completed successfully!")
     else:
-        print(f"❌ {message}")
+        print("❌ FAILED!")
+        print("="*60)
+        print(f"Error: {message}")
+        print("\n💡 TROUBLESHOOTING:")
+        print("   1. Check GMAIL_APP_PASSWORD is correct")
+        print("   2. Make sure it's a 16-character App Password (not regular password)")
+        print("   3. For Gmail: https://myaccount.google.com/apppasswords")
+        print("   4. Enable 2-Factor Authentication first")
         sys.exit(1)
-    
-    print("\n🎉 Email automation completed successfully!")
 
 if __name__ == "__main__":
     main()

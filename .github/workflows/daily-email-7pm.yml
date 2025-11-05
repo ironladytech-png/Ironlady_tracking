@@ -26,21 +26,14 @@ jobs:
       
       - name: Send Email Report
         env:
-          # Email Configuration
-          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          EMAIL_SMTP_SERVER: ${{ secrets.EMAIL_SMTP_SERVER }}
-          EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
-          RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
+          # Using YOUR existing secret names
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          CEO_EMAIL: ${{ secrets.CEO_EMAIL }}
+          AUTO_MAIL: ${{ secrets.AUTO_MAIL }}
           
           # Google Sheets Configuration (Optional)
-          GCP_TYPE: ${{ secrets.GCP_TYPE }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          GCP_PRIVATE_KEY_ID: ${{ secrets.GCP_PRIVATE_KEY_ID }}
-          GCP_PRIVATE_KEY: ${{ secrets.GCP_PRIVATE_KEY }}
-          GCP_CLIENT_EMAIL: ${{ secrets.GCP_CLIENT_EMAIL }}
-          GCP_CLIENT_ID: ${{ secrets.GCP_CLIENT_ID }}
-          GCP_CLIENT_CERT_URL: ${{ secrets.GCP_CLIENT_CERT_URL }}
+          GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
         
         run: python send_ironlady_branded_email.py
@@ -53,4 +46,4 @@ jobs:
           else
             echo "❌ Email sending failed"
             exit 1
-          
+          fi

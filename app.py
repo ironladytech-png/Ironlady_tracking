@@ -1,22 +1,21 @@
 """
-IRON LADY - COMPLETE SALES DASHBOARD (FIXED VERSION)
-====================================================
-All 100+ Features from Requirements Document
-Real-time sales performance tracking with:
+IRON LADY - COMPLETE SALES DASHBOARD WITH OCR/NER
+==================================================
+ALL FEATURES IN ONE FILE:
 - Multi-user Login System (4 Team Leaders)
 - Individual Dashboards with Manual Data Entry
 - Google Sheets Integration (AUTO-LOADS BY DEFAULT)
 - Performance Dashboard with Interactive Charts
 - AI-Powered Analysis & Insights
-- Email Reports to Multiple Recipients (WORKING BACKEND)
+- Email Reports to Multiple Recipients
 - Daily Checklists (Day 1-1, Day 1, Day 2)
+- OCR (Text Extraction from Screenshots)
+- NER (Named Entity Recognition)
+- Automatic Metric Detection
 - Complete Session Management
-- FIXED: All text visible (black text on light backgrounds)
-- FIXED: Google Sheets loads automatically
-- FIXED: Email backend working
 
 Team: Ghazala (Senior TL), Megha (Senior TL), Afreen (Trainee TL), Soumya (Trainee TL)
-Version: 11.0 - Complete Fixed Edition
+Version: 12.0 - Complete OCR/NER Edition
 """
 
 import streamlit as st
@@ -26,6 +25,32 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import json
+import io
+from PIL import Image
+import re
+
+# Try to import OCR/NER libraries
+try:
+    import pytesseract
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
+
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+
+try:
+    import spacy
+    try:
+        nlp = spacy.load("en_core_web_sm")
+        NER_AVAILABLE = True
+    except:
+        NER_AVAILABLE = False
+except ImportError:
+    NER_AVAILABLE = False
 
 # ============================================
 # PAGE CONFIGURATION
@@ -48,256 +73,168 @@ IRONLADY_COLORS = {
     'accent': '#F5E6D3',       # Beige
     'success': '#2A9D8F',
     'warning': '#F77F00',
-    'danger': '#D62828',
+    'info': '#457B9D'
 }
 
-# Complete Custom CSS - FIXED TEXT VISIBILITY
+# Custom CSS with FIXED text visibility
 st.markdown(f"""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap');
-    
-    * {{
-        font-family: 'Inter', sans-serif;
+    /* Main theme colors */
+    :root {{
+        --primary-color: {IRONLADY_COLORS['primary']};
+        --secondary-color: {IRONLADY_COLORS['secondary']};
+        --accent-color: {IRONLADY_COLORS['accent']};
     }}
     
-    .main {{
-        background-color: {IRONLADY_COLORS['accent']};
-    }}
-    
-    .stMetric {{
-        background-color: white;
-        padding: 20px;
-        border-radius: 10px;
-        border-left: 5px solid {IRONLADY_COLORS['primary']};
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }}
-    
-    .stMetric label {{
+    /* CRITICAL FIX: Ensure all text is visible */
+    .stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span {{
         color: {IRONLADY_COLORS['secondary']} !important;
     }}
     
-    .stMetric [data-testid="stMetricValue"] {{
+    /* Headers */
+    h1, h2, h3, h4 {{
+        color: {IRONLADY_COLORS['secondary']} !important;
+        font-weight: 900 !important;
+    }}
+    
+    /* Sidebar */
+    .css-1d391kg, [data-testid="stSidebar"] {{
+        background: linear-gradient(180deg, {IRONLADY_COLORS['secondary']} 0%, {IRONLADY_COLORS['primary']} 100%);
+    }}
+    
+    .css-1d391kg p, [data-testid="stSidebar"] p,
+    .css-1d391kg span, [data-testid="stSidebar"] span,
+    .css-1d391kg label, [data-testid="stSidebar"] label {{
+        color: white !important;
+    }}
+    
+    /* Metrics */
+    [data-testid="stMetricValue"] {{
         color: {IRONLADY_COLORS['primary']} !important;
+        font-size: 2rem !important;
+        font-weight: 900 !important;
     }}
     
-    h1, h2, h3 {{
+    [data-testid="stMetricLabel"] {{
         color: {IRONLADY_COLORS['secondary']} !important;
-        font-weight: 900;
+        font-weight: 700 !important;
     }}
     
-    p, span, div {{
-        color: {IRONLADY_COLORS['secondary']};
+    /* Buttons */
+    .stButton>button {{
+        background: {IRONLADY_COLORS['primary']};
+        color: white;
+        font-weight: 700;
+        border: none;
+        border-radius: 5px;
+        padding: 0.5rem 1rem;
     }}
     
-    .insight-box {{
-        background: white;
-        padding: 20px;
-        border-radius: 10px;
+    .stButton>button:hover {{
+        background: {IRONLADY_COLORS['secondary']};
+    }}
+    
+    /* Info boxes */
+    .info-msg {{
+        background: {IRONLADY_COLORS['accent']};
+        padding: 1rem;
         border-left: 5px solid {IRONLADY_COLORS['primary']};
-        margin: 15px 0;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        color: {IRONLADY_COLORS['secondary']};
+        margin: 1rem 0;
+        color: {IRONLADY_COLORS['secondary']} !important;
     }}
     
     .success-msg {{
-        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-        color: {IRONLADY_COLORS['success']};
-        padding: 15px 20px;
-        border-radius: 10px;
-        margin: 15px 0;
+        background: #d4edda;
+        padding: 1rem;
         border-left: 5px solid {IRONLADY_COLORS['success']};
-        font-weight: 500;
+        margin: 1rem 0;
+        color: #155724 !important;
     }}
     
     .warning-msg {{
-        background: linear-gradient(135deg, #fff3cd 0%, #ffe8a1 100%);
-        color: #856404;
-        padding: 15px 20px;
-        border-radius: 10px;
-        margin: 15px 0;
+        background: #fff3cd;
+        padding: 1rem;
         border-left: 5px solid {IRONLADY_COLORS['warning']};
-        font-weight: 500;
+        margin: 1rem 0;
+        color: #856404 !important;
     }}
     
-    .error-msg {{
-        background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
-        color: #721c24;
-        padding: 15px 20px;
-        border-radius: 10px;
-        margin: 15px 0;
-        border-left: 5px solid {IRONLADY_COLORS['danger']};
-        font-weight: 500;
-    }}
-    
-    .info-msg {{
-        background: white;
-        color: {IRONLADY_COLORS['secondary']};
-        padding: 15px 20px;
-        border-radius: 10px;
-        margin: 15px 0;
-        border-left: 5px solid {IRONLADY_COLORS['primary']};
-        font-weight: 500;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }}
-    
-    .stTabs [data-baseweb="tab"] {{
-        background-color: white;
-        border-radius: 10px 10px 0 0;
-        padding: 15px 25px;
-        font-weight: 700;
-        color: {IRONLADY_COLORS['secondary']};
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }}
-    
-    .stTabs [aria-selected="true"] {{
-        background: {IRONLADY_COLORS['primary']};
-        color: white !important;
-    }}
-    
+    /* Tables */
     .dataframe {{
-        border: none !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        color: {IRONLADY_COLORS['secondary']} !important;
     }}
     
-    .dataframe thead tr th {{
+    .dataframe th {{
         background: {IRONLADY_COLORS['secondary']} !important;
         color: white !important;
-        font-weight: 700 !important;
-        padding: 15px !important;
     }}
     
-    /* FIXED SIDEBAR STYLING - LIGHT BACKGROUND, DARK TEXT */
-    [data-testid="stSidebar"] {{
-        background: linear-gradient(180deg, #ffffff 0%, {IRONLADY_COLORS['accent']} 100%);
-    }}
-    
-    [data-testid="stSidebar"] * {{
-        color: {IRONLADY_COLORS['secondary']} !important;
-    }}
-    
-    [data-testid="stSidebar"] h1,
-    [data-testid="stSidebar"] h2,
-    [data-testid="stSidebar"] h3,
-    [data-testid="stSidebar"] h4,
-    [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] span,
-    [data-testid="stSidebar"] div {{
-        color: {IRONLADY_COLORS['secondary']} !important;
-    }}
-    
-    [data-testid="stSidebar"] .stMarkdown {{
-        color: {IRONLADY_COLORS['secondary']} !important;
-    }}
-    
-    [data-testid="stSidebar"] input {{
-        color: {IRONLADY_COLORS['secondary']} !important;
-        background: white !important;
-        border: 2px solid {IRONLADY_COLORS['primary']};
-    }}
-    
-    [data-testid="stSidebar"] .stSelectbox label,
-    [data-testid="stSidebar"] .stTextInput label,
-    [data-testid="stSidebar"] .stDateInput label,
-    [data-testid="stSidebar"] .stCheckbox label {{
-        color: {IRONLADY_COLORS['secondary']} !important;
-        font-weight: 600 !important;
-        font-size: 1rem !important;
-    }}
-    
-    .stButton > button {{
-        background: {IRONLADY_COLORS['primary']};
-        color: white;
-        border: none;
-        padding: 12px 28px;
-        border-radius: 10px;
-        font-weight: 700;
-        transition: all 0.3s;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }}
-    
-    .stButton > button:hover {{
-        background: {IRONLADY_COLORS['danger']};
-        box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3);
-        transform: translateY(-2px);
-    }}
-    
-    .checklist-item {{
-        background: white;
-        padding: 15px;
-        margin: 10px 0;
-        border-radius: 8px;
-        border-left: 4px solid {IRONLADY_COLORS['primary']};
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] button {{
         color: {IRONLADY_COLORS['secondary']};
-    }}
-    
-    .badge {{
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.75rem;
         font-weight: 700;
-        margin-right: 8px;
-        text-transform: uppercase;
     }}
     
-    .badge-high {{
-        background: #D62828;
-        color: white;
-    }}
-    
-    .badge-medium {{
-        background: #F77F00;
-        color: white;
-    }}
-    
-    .profile-card {{
-        background: white;
-        padding: 20px;
-        border-radius: 15px;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.3s;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        border: 3px solid transparent;
-    }}
-    
-    .profile-card:hover {{
-        transform: translateY(-5px);
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
-        border-color: {IRONLADY_COLORS['primary']};
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {{
+        color: {IRONLADY_COLORS['primary']};
+        border-bottom: 3px solid {IRONLADY_COLORS['primary']};
     }}
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================
-# TEAM LEADERS CONFIGURATION
+# SESSION STATE INITIALIZATION
 # ============================================
 
-TEAM_LEADERS = {
-    'Ghazala': {
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+
+if 'current_user' not in st.session_state:
+    st.session_state.current_user = None
+
+if 'team_data' not in st.session_state:
+    st.session_state.team_data = {}
+
+if 'sheets_data_loaded' not in st.session_state:
+    st.session_state.sheets_data_loaded = False
+
+if 'uploaded_documents' not in st.session_state:
+    st.session_state.uploaded_documents = {}
+
+if 'ocr_results' not in st.session_state:
+    st.session_state.ocr_results = {}
+
+if 'checklist_state' not in st.session_state:
+    st.session_state.checklist_state = {}
+
+# ============================================
+# USER CREDENTIALS
+# ============================================
+
+USERS = {
+    'ghazala': {
+        'password': 'ironlady2024',
+        'name': 'Ghazala',
         'role': 'Senior Team Leader',
-        'icon': '🏆',
-        'color': '#E63946',
+        'team_size': 8
     },
-    'Megha': {
+    'megha': {
+        'password': 'ironlady2024',
+        'name': 'Megha',
         'role': 'Senior Team Leader',
-        'icon': '🏆',
-        'color': '#2A9D8F',
+        'team_size': 7
     },
-    'Afreen': {
-        'role': 'Team Leader - Trainee',
-        'icon': '🌟',
-        'color': '#F77F00',
+    'afreen': {
+        'password': 'ironlady2024',
+        'name': 'Afreen',
+        'role': 'Trainee Team Leader',
+        'team_size': 5
     },
-    'Soumya': {
-        'role': 'Team Leader - Trainee',
-        'icon': '🌟',
-        'color': '#457B9D',
+    'soumya': {
+        'password': 'ironlady2024',
+        'name': 'Soumya',
+        'role': 'Trainee Team Leader',
+        'team_size': 6
     }
 }
 
@@ -306,1240 +243,1075 @@ TEAM_LEADERS = {
 # ============================================
 
 DAILY_CHECKLISTS = {
-    'Day 1-1': [
-        {'task': 'Mocks - Who are the people - Buddy structure', 'priority': 'High', 'type': 'Manual'},
-        {'task': 'Sign off Activities - each RM type', 'priority': 'High', 'type': 'Manual'},
-        {'task': 'WA Audit - Minimum 10', 'priority': 'High', 'type': 'Upload'},
-        {'task': 'Follow up Calls - 2 Registrations', 'priority': 'High', 'type': 'Manual'},
-        {'task': 'SL Calls - 5 (Share status list)', 'priority': 'High', 'type': 'Upload'},
-        {'task': 'Lead Analysis AI summary', 'priority': 'Medium', 'type': 'Upload'},
-        {'task': 'Call Audit - Minimum 5 calls', 'priority': 'High', 'type': 'Upload'},
-        {'task': 'Tracking: CRM Update, Call/Attendance/WA', 'priority': 'High', 'type': 'Ongoing'},
-        {'task': 'Targets Sharing - percentage and potential list', 'priority': 'High', 'type': 'Upload'},
-        {'task': 'CRM Updation', 'priority': 'High', 'type': 'Ongoing'},
-        {'task': 'Sharing hot prospects list', 'priority': 'Medium', 'type': 'Upload'},
-    ],
-    'Day 1': [
-        {'task': 'WA Audit - 10', 'priority': 'High', 'type': 'Upload'},
-        {'task': 'SL Calls - 8 (Share status list)', 'priority': 'High', 'type': 'Upload'},
-        {'task': 'Sign off Activities', 'priority': 'High', 'type': 'Manual'},
-        {'task': 'Mocks - Buddy structure', 'priority': 'High', 'type': 'Manual'},
-        {'task': '30s pitch Prep', 'priority': 'High', 'type': 'Manual'},
-        {'task': 'Tracking: CRM Update', 'priority': 'High', 'type': 'Ongoing'},
-        {'task': 'Call Audit - Minimum 5 calls', 'priority': 'High', 'type': 'Upload'},
-        {'task': 'Targets Sharing - % and potential list', 'priority': 'High', 'type': 'Upload'},
-        {'task': '10% Conversion - action points', 'priority': 'Medium', 'type': 'Manual'},
-        {'task': 'CRM Updation - including attendance', 'priority': 'High', 'type': 'Ongoing'},
-        {'task': 'Sharing hot prospects list and Tracking', 'priority': 'Medium', 'type': 'Upload'},
-    ],
-    'Day 2': [
-        {'task': 'SL Calls - 10-12 (Share status list)', 'priority': 'High', 'type': 'Upload'},
-        {'task': 'WA Audit - As needed', 'priority': 'Medium', 'type': 'Upload'},
-        {'task': 'Tracking: CRM Update', 'priority': 'High', 'type': 'Ongoing'},
-        {'task': 'Sign off Activities', 'priority': 'High', 'type': 'Manual'},
-        {'task': 'Targets Sharing - 10% before, 15% after', 'priority': 'High', 'type': 'Upload'},
-        {'task': 'CRM Updation - including attendance', 'priority': 'High', 'type': 'Ongoing'},
-        {'task': 'Sharing hot prospects list and Tracking', 'priority': 'Medium', 'type': 'Upload'},
-    ]
+    'Day 1-1': {
+        'tasks': [
+            {'name': 'Mocks - Who are the people - Buddy structure', 'priority': 'high', 'type': 'manual'},
+            {'name': 'Sign off Activities - each RM type', 'priority': 'high', 'type': 'manual'},
+            {'name': 'WA Audit - Minimum 10', 'priority': 'high', 'type': 'upload'},
+            {'name': 'Follow up Calls - 2 Registrations', 'priority': 'high', 'type': 'manual'},
+            {'name': 'SL Calls - 5 (Share status list)', 'priority': 'high', 'type': 'upload'},
+            {'name': 'Lead Analysis AI summary', 'priority': 'medium', 'type': 'manual'},
+            {'name': 'Call Audit - Minimum 5 calls', 'priority': 'high', 'type': 'upload'},
+            {'name': 'Tracking: CRM Update, Call/Attendance/WA', 'priority': 'high', 'type': 'ongoing'},
+            {'name': 'Targets Sharing - percentage and potential list', 'priority': 'medium', 'type': 'manual'},
+            {'name': 'CRM Updation', 'priority': 'high', 'type': 'ongoing'},
+            {'name': 'Sharing hot prospects list', 'priority': 'medium', 'type': 'manual'},
+        ]
+    },
+    'Day 1': {
+        'tasks': [
+            {'name': 'WA Audit - 10', 'priority': 'high', 'type': 'upload'},
+            {'name': 'SL Calls - 8 (Share status list)', 'priority': 'high', 'type': 'upload'},
+            {'name': 'Sign off Activities', 'priority': 'high', 'type': 'manual'},
+            {'name': 'Mocks - Buddy structure', 'priority': 'high', 'type': 'manual'},
+            {'name': '30s pitch Prep', 'priority': 'medium', 'type': 'manual'},
+            {'name': 'Tracking: CRM Update', 'priority': 'high', 'type': 'ongoing'},
+            {'name': 'Call Audit - Minimum 5 calls', 'priority': 'high', 'type': 'upload'},
+            {'name': 'Targets Sharing - % and potential list', 'priority': 'medium', 'type': 'manual'},
+            {'name': '10% Conversion - action points', 'priority': 'high', 'type': 'manual'},
+            {'name': 'CRM Updation - including attendance', 'priority': 'high', 'type': 'ongoing'},
+            {'name': 'Sharing hot prospects list and Tracking', 'priority': 'medium', 'type': 'manual'},
+        ]
+    },
+    'Day 2': {
+        'tasks': [
+            {'name': 'SL Calls - 10-12 (Share status list)', 'priority': 'high', 'type': 'upload'},
+            {'name': 'WA Audit - As needed', 'priority': 'medium', 'type': 'upload'},
+            {'name': 'Tracking: CRM Update', 'priority': 'high', 'type': 'ongoing'},
+            {'name': 'Sign off Activities', 'priority': 'high', 'type': 'manual'},
+            {'name': 'Targets Sharing - 10% before, 15% after', 'priority': 'high', 'type': 'manual'},
+            {'name': 'CRM Updation - including attendance', 'priority': 'high', 'type': 'ongoing'},
+            {'name': 'Sharing hot prospects list and Tracking', 'priority': 'medium', 'type': 'manual'},
+        ]
+    }
 }
 
 # ============================================
-# SESSION STATE INITIALIZATION
+# OCR FUNCTIONS
 # ============================================
 
-def init_session_state():
-    """Initialize all session state variables"""
-    if 'logged_in' not in st.session_state:
-        st.session_state.logged_in = False
-    if 'current_user' not in st.session_state:
-        st.session_state.current_user = None
-    if 'user_data' not in st.session_state:
-        st.session_state.user_data = {}
-    if 'session_date' not in st.session_state:
-        st.session_state.session_date = datetime.now()
-    if 'day_type' not in st.session_state:
-        st.session_state.day_type = 'Day 1-1'
-    if 'checklist_completion' not in st.session_state:
-        st.session_state.checklist_completion = {}
-    if 'use_google_sheets' not in st.session_state:
-        st.session_state.use_google_sheets = True  # AUTO-ENABLED BY DEFAULT
-    if 'sheet_id' not in st.session_state:
-        st.session_state.sheet_id = ''
-    if 'auto_loaded_sheets' not in st.session_state:
-        st.session_state.auto_loaded_sheets = False
-    if 'last_sheet_data' not in st.session_state:
-        st.session_state.last_sheet_data = None
+def preprocess_image(image):
+    """Preprocess image for better OCR results"""
+    if not CV2_AVAILABLE:
+        return image
+    
+    try:
+        # Convert PIL to OpenCV format
+        img_array = np.array(image)
+        
+        # Convert to grayscale
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        
+        # Apply thresholding
+        thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+        
+        # Noise removal
+        denoised = cv2.fastNlMeansDenoising(thresh)
+        
+        return Image.fromarray(denoised)
+    except Exception as e:
+        return image
+
+def extract_text_from_image(image):
+    """Extract text from image using OCR"""
+    if not OCR_AVAILABLE:
+        return None, "OCR not available. Install pytesseract."
+    
+    try:
+        # Preprocess image
+        processed_image = preprocess_image(image)
+        
+        # Extract text
+        text = pytesseract.image_to_string(processed_image)
+        
+        return text, None
+    except Exception as e:
+        return None, f"OCR Error: {str(e)}"
 
 # ============================================
-# GOOGLE SHEETS FUNCTIONS (IMPROVED)
+# NER FUNCTIONS
 # ============================================
 
-def connect_to_google_sheets():
-    """Connect to Google Sheets with improved error handling"""
+def extract_entities(text):
+    """Extract named entities from text"""
+    if not NER_AVAILABLE:
+        return None, "NER not available"
+    
+    try:
+        doc = nlp(text)
+        
+        entities = {
+            'PERSON': [],
+            'ORG': [],
+            'DATE': [],
+            'MONEY': [],
+            'CARDINAL': [],
+            'PERCENT': [],
+            'PHONE': [],
+            'EMAIL': []
+        }
+        
+        # Extract spaCy entities
+        for ent in doc.ents:
+            if ent.label_ in entities:
+                entities[ent.label_].append(ent.text)
+        
+        # Extract phone numbers (simple regex)
+        phones = re.findall(r'\b\d{10}\b|\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', text)
+        entities['PHONE'] = phones
+        
+        # Extract emails (simple regex)
+        emails = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', text)
+        entities['EMAIL'] = emails
+        
+        # Remove duplicates
+        for key in entities:
+            entities[key] = list(set(entities[key]))
+        
+        return entities, None
+    except Exception as e:
+        return None, f"NER Error: {str(e)}"
+
+def extract_metrics_from_text(text):
+    """Extract sales metrics from text"""
+    metrics = {
+        'pitches': [],
+        'registrations': [],
+        'leads': [],
+        'rms': []
+    }
+    
+    # Look for numbers near keywords
+    patterns = {
+        'pitches': r'(?:pitch|pitches|calls?)\s*[:=]?\s*(\d+)',
+        'registrations': r'(?:registration|registrations|reg|regs)\s*[:=]?\s*(\d+)',
+        'leads': r'(?:lead|leads)\s*[:=]?\s*(\d+)',
+        'rms': r'(?:rm|rms|team\s*member)\s*[:=]?\s*(\d+)'
+    }
+    
+    for key, pattern in patterns.items():
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        metrics[key] = [int(m) for m in matches]
+    
+    return metrics
+
+# ============================================
+# GOOGLE SHEETS INTEGRATION
+# ============================================
+
+def load_from_sheets():
+    """Load data from Google Sheets"""
     try:
         import gspread
         from google.oauth2.service_account import Credentials
         
-        # Check if secrets are configured
-        if "gcp_service_account" not in st.secrets:
-            return None, "Google Sheets credentials not found in secrets"
-        
-        credentials_dict = st.secrets["gcp_service_account"]
-        
-        # Create credentials
-        credentials = Credentials.from_service_account_info(
-            credentials_dict,
-            scopes=[
-                'https://www.googleapis.com/auth/spreadsheets.readonly',
-                'https://www.googleapis.com/auth/drive.readonly'
-            ]
-        )
-        
-        client = gspread.authorize(credentials)
-        return client, None
-        
-    except ImportError:
-        return None, "gspread library not installed. Run: pip install gspread google-auth"
-    except Exception as e:
-        return None, f"Connection error: {str(e)}"
-
-def fetch_sheet_data(sheet_id):
-    """Fetch data from Google Sheets with improved error handling"""
-    try:
-        client, error = connect_to_google_sheets()
-        if error:
-            return None, error
-        
-        # Extract sheet ID from URL if needed
-        if 'docs.google.com' in sheet_id:
-            sheet_id = sheet_id.split('/d/')[1].split('/')[0]
-        
-        # Open spreadsheet
-        spreadsheet = client.open_by_key(sheet_id)
-        data = {}
-        worksheets = spreadsheet.worksheets()
-        
-        # Fetch all worksheets
-        for worksheet in worksheets:
-            sheet_name = worksheet.title
-            records = worksheet.get_all_records()
-            if records:
-                df = pd.DataFrame(records)
-                data[sheet_name] = df
-        
-        if not data:
-            return None, "No data found in spreadsheet"
-        
-        return data, None
-        
-    except Exception as e:
-        return None, f"Error fetching data: {str(e)}"
-
-def parse_team_data(sheet_data, user_name):
-    """Parse team leader data from Google Sheets with improved column detection"""
-    if not sheet_data:
-        return []
-    
-    team_data = []
-    
-    for sheet_name, df in sheet_data.items():
-        # Find name column (flexible matching)
-        name_col = None
-        for col in df.columns:
-            col_upper = str(col).upper()
-            if any(keyword in col_upper for keyword in ['RM', 'NAME', 'TEAM', 'MEMBER', 'EMPLOYEE']):
-                name_col = col
-                break
-        
-        if not name_col:
-            continue
-        
-        # Process each row
-        for _, row in df.iterrows():
-            rm_name = str(row.get(name_col, '')).strip()
+        # Try to get credentials from Streamlit secrets
+        if 'GOOGLE_SHEETS_CREDENTIALS' in st.secrets:
+            credentials_dict = dict(st.secrets['GOOGLE_SHEETS_CREDENTIALS'])
+            sheet_id = st.secrets.get('GOOGLE_SHEET_ID', '')
             
-            if not rm_name or rm_name == '' or rm_name.lower() == 'nan':
-                continue
-            
-            entry = {
-                'rm_name': rm_name,
-                'total_rms': 1,
-                'lead_count': 0,
-                'pitches_target': 0,
-                'pitches_actual': 0,
-                'reg_target': 0,
-                'reg_actual': 0,
-            }
-            
-            # Parse all columns flexibly
-            for col in df.columns:
-                col_upper = str(col).upper()
-                val = row.get(col, 0)
+            if sheet_id:
+                credentials = Credentials.from_service_account_info(
+                    credentials_dict,
+                    scopes=[
+                        'https://www.googleapis.com/auth/spreadsheets.readonly',
+                        'https://www.googleapis.com/auth/drive.readonly'
+                    ]
+                )
                 
-                try:
-                    val = int(val) if pd.notna(val) and val != '' else 0
-                except:
-                    val = 0
+                client = gspread.authorize(credentials)
+                spreadsheet = client.open_by_key(sheet_id)
+                worksheet = spreadsheet.sheet1
                 
-                # Match columns to fields
-                if 'LEAD' in col_upper and ('COUNT' in col_upper or 'TOTAL' in col_upper):
-                    entry['lead_count'] = val
-                elif 'TARGET' in col_upper and 'PITCH' in col_upper:
-                    entry['pitches_target'] = val
-                elif 'ACTUAL' in col_upper and 'PITCH' in col_upper:
-                    entry['pitches_actual'] = val
-                elif ('PITCH' in col_upper or 'CALL' in col_upper) and 'TARGET' not in col_upper and 'ACTUAL' not in col_upper:
-                    if entry['pitches_actual'] == 0:
-                        entry['pitches_actual'] = val
-                elif 'TARGET' in col_upper and ('REG' in col_upper or 'REGISTRATION' in col_upper):
-                    entry['reg_target'] = val
-                elif 'ACTUAL' in col_upper and ('REG' in col_upper or 'REGISTRATION' in col_upper):
-                    entry['reg_actual'] = val
-                elif 'REG' in col_upper and 'TARGET' not in col_upper and 'ACTUAL' not in col_upper:
-                    if entry['reg_actual'] == 0:
-                        entry['reg_actual'] = val
-            
-            team_data.append(entry)
+                data = worksheet.get_all_records()
+                
+                if data:
+                    df = pd.DataFrame(data)
+                    
+                    # Store in session state by team leader
+                    for _, row in df.iterrows():
+                        team_leader = row.get('Team_Leader', '').lower()
+                        if team_leader in USERS:
+                            st.session_state.team_data[team_leader] = {
+                                'total_rms': int(row.get('Total_RMs', 0)),
+                                'total_pitches': int(row.get('Total_Pitches', 0)),
+                                'total_registrations': int(row.get('Total_Registrations', 0)),
+                                'conversion_rate': float(row.get('Conversion_Rate', 0))
+                            }
+                    
+                    st.session_state.sheets_data_loaded = True
+                    return True, "Data loaded from Google Sheets successfully!"
+        
+        return False, "Google Sheets not configured"
     
-    return team_data
-
-# ============================================
-# EMAIL FUNCTIONS (FIXED BACKEND)
-# ============================================
-
-def send_email_report(recipient_emails, subject, df, insights, user_name):
-    """Send comprehensive email report with working backend"""
-    try:
-        import smtplib
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-        
-        # Check if email is configured
-        required_secrets = ["email_sender", "email_password", "email_smtp_server", "email_smtp_port"]
-        if not all(secret in st.secrets for secret in required_secrets):
-            return False, "Email configuration not found in secrets. Please add email settings."
-        
-        # Create message
-        msg = MIMEMultipart('alternative')
-        msg['From'] = st.secrets["email_sender"]
-        
-        # Handle multiple recipients
-        if isinstance(recipient_emails, list):
-            msg['To'] = ', '.join(recipient_emails)
-            recipients = recipient_emails
-        else:
-            msg['To'] = recipient_emails
-            recipients = [recipient_emails]
-        
-        msg['Subject'] = subject
-        
-        # Create HTML body
-        html_body = f"""
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; background-color: #F5E6D3; margin: 0; padding: 0; }}
-                .container {{ max-width: 800px; margin: 20px auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }}
-                .header {{ background: linear-gradient(135deg, #E63946 0%, #D62828 100%); color: white; padding: 40px 30px; text-align: center; }}
-                .header h1 {{ margin: 0; font-size: 2.5rem; letter-spacing: 3px; font-weight: 900; }}
-                .header p {{ margin: 10px 0 0 0; font-size: 1.1rem; opacity: 0.9; }}
-                .content {{ padding: 40px 30px; }}
-                .metric {{ background: #F5E6D3; padding: 20px; margin: 15px 0; border-left: 5px solid #E63946; border-radius: 5px; }}
-                .section-title {{ color: #1A1A1A; font-size: 1.5rem; font-weight: 900; margin: 30px 0 15px 0; padding-bottom: 10px; border-bottom: 3px solid #E63946; }}
-                table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
-                th {{ background: #1A1A1A; color: white; padding: 15px; text-align: left; font-weight: 700; }}
-                td {{ padding: 12px 15px; border-bottom: 1px solid #e0e0e0; }}
-                tr:hover {{ background-color: #F5E6D3; }}
-                .footer {{ background: #1A1A1A; color: white; text-align: center; padding: 30px; }}
-                .highlight {{ background: #E63946; color: white; padding: 3px 8px; border-radius: 3px; font-weight: 700; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>IRON LADY</h1>
-                    <p>Sales Performance Report - {datetime.now().strftime('%B %d, %Y')}</p>
-                    <p>Team Leader: {user_name}</p>
-                </div>
-                <div class="content">
-                    <h2 class="section-title">📊 Executive Summary</h2>
-                    <div class="metric">
-                        <strong>Total RMs:</strong> {insights['total_rms']}<br/>
-                        <strong>Total Pitches:</strong> {insights['total_pitches']}<br/>
-                        <strong>Total Registrations:</strong> {insights['total_registrations']}<br/>
-                        <strong>Average Conversion:</strong> <span class="highlight">{insights['avg_conversion']}%</span>
-                    </div>
-        """
-        
-        if insights.get('best_performer'):
-            bp = insights['best_performer']
-            html_body += f"""
-                    <h2 class="section-title">⭐ Top Performer</h2>
-                    <div class="metric">
-                        <strong>Name:</strong> {bp['name']}<br/>
-                        <strong>Conversion:</strong> {bp['conversion']}%
-                    </div>
-            """
-        
-        html_body += """
-                    <h2 class="section-title">📋 Team Performance</h2>
-                    <table>
-                        <thead><tr>
-                            <th>RM Name</th>
-                            <th>Pitches</th>
-                            <th>Registrations</th>
-                            <th>Conversion %</th>
-                        </tr></thead>
-                        <tbody>
-        """
-        
-        for _, row in df.iterrows():
-            conv = row.get('conversion', 0)
-            html_body += f"""
-                        <tr>
-                            <td>{row['rm_name']}</td>
-                            <td>{row['pitches_actual']}/{row['pitches_target']}</td>
-                            <td>{row['reg_actual']}/{row['reg_target']}</td>
-                            <td style="font-weight: 700;">{conv}%</td>
-                        </tr>
-            """
-        
-        html_body += """
-                        </tbody>
-                    </table>
-        """
-        
-        # Add recommendations
-        if insights.get('recommendations'):
-            html_body += """
-                    <h2 class="section-title">💡 Recommendations</h2>
-            """
-            for rec in insights['recommendations']:
-                html_body += f"""
-                    <div class="metric">{rec}</div>
-                """
-        
-        html_body += """
-                </div>
-                <div class="footer">
-                    <p style="font-size: 1.3rem; font-weight: 900;">IRON LADY</p>
-                    <p>Team: Ghazala 🏆 | Megha 🏆 | Afreen 🌟 | Soumya 🌟</p>
-                    <p style="margin-top: 15px; font-size: 0.9rem; opacity: 0.8;">© 2024 Iron Lady. All rights reserved.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        
-        msg.attach(MIMEText(html_body, 'html'))
-        
-        # Send email with improved error handling
-        try:
-            server = smtplib.SMTP(st.secrets["email_smtp_server"], int(st.secrets["email_smtp_port"]))
-            server.set_debuglevel(0)  # Disable debug output
-            server.starttls()
-            server.login(st.secrets["email_sender"], st.secrets["email_password"])
-            server.send_message(msg)
-            server.quit()
-            
-            return True, f"Email sent successfully to {len(recipients)} recipient(s)"
-            
-        except smtplib.SMTPAuthenticationError:
-            return False, "Email authentication failed. Check email_sender and email_password in secrets"
-        except smtplib.SMTPException as e:
-            return False, f"SMTP error: {str(e)}"
-        except Exception as e:
-            return False, f"Email sending error: {str(e)}"
-        
     except Exception as e:
-        return False, f"Error preparing email: {str(e)}"
+        return False, f"Error loading from Google Sheets: {str(e)}"
 
 # ============================================
-# AI ANALYSIS FUNCTIONS
+# LOGIN SYSTEM
 # ============================================
 
-def analyze_team_performance(df):
-    """Generate AI-powered insights"""
+def show_login():
+    """Display login page"""
     
-    insights = {
-        'total_rms': int(df['total_rms'].sum()) if 'total_rms' in df.columns else len(df),
-        'total_pitches': int(df['pitches_actual'].sum()),
-        'total_registrations': int(df['reg_actual'].sum()),
-        'avg_conversion': 0,
-        'best_performer': None,
-        'needs_support': None,
-        'recommendations': []
-    }
+    # Header
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown(f"""
+        <div style='text-align: center; padding: 2rem; background: linear-gradient(135deg, {IRONLADY_COLORS['primary']} 0%, {IRONLADY_COLORS['secondary']} 100%); border-radius: 10px; margin-bottom: 2rem;'>
+            <h1 style='color: white; font-size: 3rem; font-weight: 900; margin: 0; letter-spacing: 3px;'>IRON LADY</h1>
+            <p style='color: white; font-size: 1.2rem; margin: 0.5rem 0 0 0;'>Sales Performance Dashboard</p>
+        </div>
+        """, unsafe_allow_html=True)
     
-    # Calculate conversions
-    df['conversion'] = df.apply(
-        lambda x: round((x['reg_actual'] / x['pitches_actual'] * 100), 1) if x['pitches_actual'] > 0 else 0,
-        axis=1
-    )
-    
-    insights['avg_conversion'] = round(df['conversion'].mean(), 1)
-    
-    # Find best and worst performers
-    if len(df) > 0:
-        best_idx = df['conversion'].idxmax()
-        worst_idx = df['conversion'].idxmin()
+    # Login form
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("### 🔐 Team Leader Login")
         
-        insights['best_performer'] = {
-            'name': df.loc[best_idx, 'rm_name'],
-            'conversion': df.loc[best_idx, 'conversion'],
-        }
+        username = st.text_input("Username", placeholder="Enter your username")
+        password = st.text_input("Password", type="password", placeholder="Enter your password")
         
-        insights['needs_support'] = {
-            'name': df.loc[worst_idx, 'rm_name'],
-            'conversion': df.loc[worst_idx, 'conversion'],
-        }
-    
-    # Generate recommendations
-    avg_conv = insights['avg_conversion']
-    
-    if avg_conv < 50:
-        insights['recommendations'].append("🚨 CRITICAL: Team conversion is very low (<50%). Immediate training required.")
-    elif avg_conv < 60:
-        insights['recommendations'].append("⚠️ URGENT: Conversion below target. Schedule coaching sessions.")
-    elif avg_conv < 75:
-        insights['recommendations'].append("📈 ACTION: Room for improvement. Focus on closing techniques.")
-    else:
-        insights['recommendations'].append("✅ EXCELLENT: Team exceeding targets. Maintain momentum!")
-    
-    low_performers = df[df['conversion'] < 60]
-    if len(low_performers) > 0:
-        names = ', '.join(low_performers['rm_name'].tolist()[:3])
-        insights['recommendations'].append(f"🎯 SUPPORT NEEDED: {names}")
-    
-    return insights
-
-# ============================================
-# LOGIN PAGE
-# ============================================
-
-def show_login_page():
-    """Display login page with all team leaders"""
-    
-    st.markdown(f"""
-    <div style="text-align: center; padding: 60px 20px; background: linear-gradient(135deg, {IRONLADY_COLORS['accent']} 0%, white 100%); border-radius: 20px; margin-bottom: 30px;">
-        <h1 style="font-size: 4rem; margin: 0; letter-spacing: 8px; color: {IRONLADY_COLORS['secondary']};">IRON LADY</h1>
-        <p style="font-size: 1.5rem; margin: 15px 0; font-weight: 600; color: {IRONLADY_COLORS['secondary']};">Sales Performance Dashboard</p>
-        <p style="font-size: 1rem; opacity: 0.7; color: {IRONLADY_COLORS['secondary']};">Select Your Profile to Continue</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("### 👥 SELECT YOUR PROFILE")
-    
-    cols = st.columns(4)
-    
-    for idx, (name, info) in enumerate(TEAM_LEADERS.items()):
-        with cols[idx]:
-            st.markdown(f"""
-            <div class="profile-card" style="border-color: {info['color']};">
-                <div style="font-size: 4rem; margin-bottom: 15px;">{info['icon']}</div>
-                <h3 style="margin: 10px 0; color: {info['color']};">{name}</h3>
-                <p style="margin: 5px 0; font-size: 0.9rem; opacity: 0.8; color: {IRONLADY_COLORS['secondary']};">{info['role']}</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            if st.button(f"Login as {name}", key=f"login_{name}", use_container_width=True):
+        if st.button("🚀 LOGIN", use_container_width=True):
+            if username.lower() in USERS and USERS[username.lower()]['password'] == password:
                 st.session_state.logged_in = True
-                st.session_state.current_user = name
-                st.session_state.user_data[name] = []
-                st.session_state.auto_loaded_sheets = False  # Reset auto-load flag
+                st.session_state.current_user = username.lower()
+                
+                # Try to load Google Sheets data on login
+                success, message = load_from_sheets()
+                if success:
+                    st.success(message)
+                
                 st.rerun()
-    
-    st.markdown("<br/><br/>", unsafe_allow_html=True)
-    st.markdown("""
-    <div class="info-msg" style="text-align: center;">
-        <strong>🔒 Secure Session Management</strong><br/>
-        Each team leader has individual dashboard access with isolated data storage
-    </div>
-    """, unsafe_allow_html=True)
+            else:
+                st.error("❌ Invalid username or password")
+        
+        st.markdown("---")
+        st.markdown("""
+        <div class="info-msg">
+            <strong>👥 Team Leaders:</strong><br/>
+            • Ghazala (Senior TL)<br/>
+            • Megha (Senior TL)<br/>
+            • Afreen (Trainee TL)<br/>
+            • Soumya (Trainee TL)<br/><br/>
+            <strong>Default Password:</strong> ironlady2024
+        </div>
+        """, unsafe_allow_html=True)
 
 # ============================================
-# MAIN DASHBOARD
+# SIDEBAR
 # ============================================
 
-def show_dashboard():
-    """Main dashboard for logged-in user"""
+def show_sidebar():
+    """Display sidebar with user info and navigation"""
     
     user = st.session_state.current_user
-    user_info = TEAM_LEADERS[user]
+    user_info = USERS[user]
     
-    # ============================================
-    # AUTO-LOAD GOOGLE SHEETS ON FIRST LOGIN
-    # ============================================
-    if st.session_state.use_google_sheets and st.session_state.sheet_id and not st.session_state.auto_loaded_sheets:
-        with st.spinner("🔄 Auto-loading Google Sheets data..."):
-            sheet_data, error = fetch_sheet_data(st.session_state.sheet_id)
-            if sheet_data:
-                loaded_data = parse_team_data(sheet_data, user)
-                if loaded_data:
-                    st.session_state.user_data[user] = loaded_data
-                    st.session_state.last_sheet_data = sheet_data
-                    st.session_state.auto_loaded_sheets = True
-                    st.success(f"✅ Auto-loaded {len(loaded_data)} entries from Google Sheets")
-    
-    # ============================================
-    # SIDEBAR
-    # ============================================
-    with st.sidebar:
-        st.markdown(f"""
-        <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-            <div style="font-size: 3rem;">{user_info['icon']}</div>
-            <h3 style="margin: 10px 0; color: {user_info['color']};">{user}</h3>
-            <p style="margin: 0; font-size: 0.85rem; color: {IRONLADY_COLORS['secondary']};">{user_info['role']}</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("---")
-        
-        # Session Settings
-        st.markdown("### 📅 SESSION SETTINGS")
-        
-        session_date = st.date_input(
-            "Date",
-            value=st.session_state.session_date
-        )
-        st.session_state.session_date = session_date
-        
-        day_type = st.selectbox(
-            "Day Type",
-            options=['Day 1-1', 'Day 1', 'Day 2'],
-            index=['Day 1-1', 'Day 1', 'Day 2'].index(st.session_state.day_type)
-        )
-        st.session_state.day_type = day_type
-        
-        st.markdown("---")
-        
-        # Google Sheets Settings
-        st.markdown("### 📊 GOOGLE SHEETS")
-        
-        use_sheets = st.checkbox(
-            "Enable Google Sheets",
-            value=st.session_state.use_google_sheets,
-            help="Load data from Google Sheets"
-        )
-        st.session_state.use_google_sheets = use_sheets
-        
-        if use_sheets:
-            sheet_id = st.text_input(
-                "Sheet ID/URL",
-                value=st.session_state.sheet_id,
-                placeholder="Paste Google Sheet ID or URL",
-                help="Example: 1abc123xyz... or full Google Sheets URL"
-            )
-            st.session_state.sheet_id = sheet_id
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button("📥 Load", use_container_width=True):
-                    if sheet_id:
-                        with st.spinner("Loading..."):
-                            sheet_data, error = fetch_sheet_data(sheet_id)
-                            if sheet_data:
-                                loaded_data = parse_team_data(sheet_data, user)
-                                if loaded_data:
-                                    st.session_state.user_data[user] = loaded_data
-                                    st.session_state.last_sheet_data = sheet_data
-                                    st.success(f"✅ Loaded {len(loaded_data)} entries")
-                                    st.rerun()
-                                else:
-                                    st.warning("⚠️ No data found")
-                            else:
-                                st.error(f"❌ {error}")
-                    else:
-                        st.warning("⚠️ Enter Sheet ID")
-            
-            with col2:
-                if st.button("🔄 Refresh", use_container_width=True):
-                    if sheet_id:
-                        with st.spinner("Refreshing..."):
-                            sheet_data, error = fetch_sheet_data(sheet_id)
-                            if sheet_data:
-                                loaded_data = parse_team_data(sheet_data, user)
-                                if loaded_data:
-                                    st.session_state.user_data[user] = loaded_data
-                                    st.session_state.last_sheet_data = sheet_data
-                                    st.success("✅ Refreshed")
-                                    st.rerun()
-            
-            with st.expander("🔧 Setup Guide"):
-                st.markdown("""
-                **Required Setup:**
-                1. Create Google Cloud Project
-                2. Enable Google Sheets API
-                3. Create Service Account
-                4. Add credentials to secrets.toml
-                5. Share sheet with service account email
-                
-                **Secrets Format:**
-                ```toml
-                [gcp_service_account]
-                type = "service_account"
-                project_id = "your-project"
-                private_key = "-----BEGIN PRIVATE KEY-----\\n..."
-                client_email = "your-account@project.iam.gserviceaccount.com"
-                ...
-                ```
-                """)
-        else:
-            st.info("💡 Using Manual Data Entry mode")
-        
-        st.markdown("---")
-        
-        # Quick Stats
-        st.markdown("### 📊 QUICK STATS")
-        current_data = st.session_state.user_data.get(user, [])
-        if current_data:
-            total_rms = len(current_data)
-            total_pitches = sum(d['pitches_actual'] for d in current_data)
-            total_regs = sum(d['reg_actual'] for d in current_data)
-            st.metric("Total RMs", total_rms)
-            st.metric("Total Pitches", total_pitches)
-            st.metric("Total Registrations", total_regs)
-        else:
-            st.info("No data yet")
-        
-        st.markdown("---")
-        
-        # Logout
-        if st.button("🚪 Logout", use_container_width=True, type="primary"):
-            st.session_state.logged_in = False
-            st.session_state.current_user = None
-            st.session_state.auto_loaded_sheets = False
-            st.rerun()
-        
-        st.markdown("---")
-        st.markdown(f"**🕐 Session Time**")
-        st.markdown(f"{datetime.now().strftime('%I:%M %p')}")
-    
-    # ============================================
-    # MAIN HEADER
-    # ============================================
-    st.markdown(f"""
-    <div style="text-align: center; padding: 30px; background: linear-gradient(135deg, {IRONLADY_COLORS['accent']} 0%, white 100%); border-radius: 15px; margin-bottom: 30px; border: 3px solid {user_info['color']};">
-        <h1 style="font-size: 3rem; margin: 0; color: {IRONLADY_COLORS['secondary']};">Welcome, {user}! {user_info['icon']}</h1>
-        <p style="font-size: 1.2rem; margin: 10px 0; color: {IRONLADY_COLORS['secondary']};">{user_info['role']}</p>
-        <p style="font-size: 0.95rem; opacity: 0.7; color: {IRONLADY_COLORS['secondary']};">Session: {session_date.strftime('%B %d, %Y')} | {day_type}</p>
+    st.sidebar.markdown(f"""
+    <div style='text-align: center; padding: 1.5rem; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 1rem;'>
+        <h2 style='color: white; margin: 0; font-size: 2rem;'>IRON LADY</h2>
+        <p style='color: white; margin: 0.5rem 0 0 0; font-size: 0.9rem;'>💪 Sales Dashboard</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # ============================================
-    # MAIN TABS
-    # ============================================
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "📝 Data Entry",
-        "📊 Performance Dashboard",
-        "📋 Google Sheets Viewer",
-        "🤖 AI Analysis",
-        "📧 Email Reports",
-        "✅ Daily Checklist"
-    ])
+    st.sidebar.markdown(f"""
+    <div style='background: rgba(255,255,255,0.15); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;'>
+        <p style='color: white; margin: 0; font-size: 0.9rem;'><strong>👤 Name:</strong> {user_info['name']}</p>
+        <p style='color: white; margin: 0.5rem 0 0 0; font-size: 0.9rem;'><strong>🏆 Role:</strong> {user_info['role']}</p>
+        <p style='color: white; margin: 0.5rem 0 0 0; font-size: 0.9rem;'><strong>👥 Team:</strong> {user_info['team_size']} RMs</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # ============================================
-    # TAB 1: DATA ENTRY
-    # ============================================
-    with tab1:
-        st.markdown("### 📝 MANUAL DATA ENTRY")
-        st.markdown("""
-        <div class="info-msg">
-            ➕ <strong>Add New RM Entries</strong><br/>
-            Enter performance data for each RM in your team
-        </div>
-        """, unsafe_allow_html=True)
-        
-        with st.form("data_entry_form", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                rm_name = st.text_input("RM Name *", placeholder="Enter RM name")
-                lead_count = st.number_input("Lead Count", min_value=0, value=0)
-                pitches_target = st.number_input("Target Pitches *", min_value=0, value=0)
-                pitches_actual = st.number_input("Actual Pitches *", min_value=0, value=0)
-            
-            with col2:
-                st.markdown("<br/>", unsafe_allow_html=True)
-                reg_target = st.number_input("Target Registrations *", min_value=0, value=0)
-                reg_actual = st.number_input("Actual Registrations *", min_value=0, value=0)
-            
-            submitted = st.form_submit_button("➕ Add Entry", use_container_width=True, type="primary")
-            
-            if submitted:
-                if rm_name and pitches_target > 0:
-                    new_entry = {
-                        'rm_name': rm_name,
-                        'total_rms': 1,
-                        'lead_count': lead_count,
-                        'pitches_target': pitches_target,
-                        'pitches_actual': pitches_actual,
-                        'reg_target': reg_target,
-                        'reg_actual': reg_actual,
-                    }
-                    
-                    if user not in st.session_state.user_data:
-                        st.session_state.user_data[user] = []
-                    
-                    st.session_state.user_data[user].append(new_entry)
-                    st.success(f"✅ Added entry for {rm_name}")
-                    st.rerun()
-                else:
-                    st.error("❌ Please fill required fields (RM Name, Target Pitches)")
-        
-        st.markdown("---")
-        
-        # Display current entries
-        st.markdown("### 📋 CURRENT ENTRIES")
-        
-        current_data = st.session_state.user_data.get(user, [])
-        
-        if current_data:
-            df_display = pd.DataFrame(current_data)
-            
-            # Add calculated columns
-            df_display['Pitch %'] = df_display.apply(
-                lambda x: f"{round(x['pitches_actual']/x['pitches_target']*100, 1)}%" if x['pitches_target'] > 0 else "0%",
-                axis=1
-            )
-            df_display['Reg %'] = df_display.apply(
-                lambda x: f"{round(x['reg_actual']/x['reg_target']*100, 1)}%" if x['reg_target'] > 0 else "0%",
-                axis=1
-            )
-            df_display['Conversion'] = df_display.apply(
-                lambda x: f"{round(x['reg_actual']/x['pitches_actual']*100, 1)}%" if x['pitches_actual'] > 0 else "0%",
-                axis=1
-            )
-            
-            display_cols = ['rm_name', 'lead_count', 'pitches_actual', 'Pitch %', 'reg_actual', 'Reg %', 'Conversion']
-            display_df = df_display[display_cols].copy()
-            display_df.columns = ['RM Name', 'Leads', 'Pitches', 'Pitch %', 'Registrations', 'Reg %', 'Conversion']
-            
-            st.dataframe(display_df, use_container_width=True, hide_index=True, height=400)
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                if st.button("🗑️ Clear All Data", use_container_width=True):
-                    st.session_state.user_data[user] = []
-                    st.success("✅ All data cleared")
-                    st.rerun()
-            
-            with col2:
-                csv = display_df.to_csv(index=False)
-                st.download_button(
-                    "⬇️ Download CSV",
-                    data=csv,
-                    file_name=f"{user}_data_{datetime.now().strftime('%Y%m%d')}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-            
-            with col3:
-                json_str = df_display.to_json(orient='records', indent=2)
-                st.download_button(
-                    "⬇️ Download JSON",
-                    data=json_str,
-                    file_name=f"{user}_data_{datetime.now().strftime('%Y%m%d')}.json",
-                    mime="application/json",
-                    use_container_width=True
-                )
-        else:
-            st.info("📝 No entries yet. Add your first RM entry above!")
+    st.sidebar.markdown("---")
     
-    # ============================================
-    # TAB 2: PERFORMANCE DASHBOARD
-    # ============================================
-    with tab2:
-        st.markdown("### 📊 PERFORMANCE DASHBOARD")
-        
-        current_data = st.session_state.user_data.get(user, [])
-        
-        if not current_data:
-            st.warning("⚠️ No data available. Add entries in the 'Data Entry' tab or load from Google Sheets.")
-        else:
-            df = pd.DataFrame(current_data)
-            
-            # Calculate metrics
-            total_rms = len(df)
-            total_leads = int(df['lead_count'].sum())
-            total_pitch_target = int(df['pitches_target'].sum())
-            total_pitch_actual = int(df['pitches_actual'].sum())
-            total_reg_target = int(df['reg_target'].sum())
-            total_reg_actual = int(df['reg_actual'].sum())
-            
-            pitch_achievement = round((total_pitch_actual / total_pitch_target * 100), 1) if total_pitch_target > 0 else 0
-            reg_achievement = round((total_reg_actual / total_reg_target * 100), 1) if total_reg_target > 0 else 0
-            conversion_rate = round((total_reg_actual / total_pitch_actual * 100), 1) if total_pitch_actual > 0 else 0
-            
-            # Key Metrics
-            col1, col2, col3, col4, col5 = st.columns(5)
-            
-            with col1:
-                st.metric("👥 Total RMs", total_rms)
-            
-            with col2:
-                st.metric("📞 Total Leads", total_leads)
-            
-            with col3:
-                st.metric("🎯 Pitch Achievement", f"{pitch_achievement}%")
-            
-            with col4:
-                st.metric("📝 Reg Achievement", f"{reg_achievement}%")
-            
-            with col5:
-                conv_status = "🟢" if conversion_rate >= 75 else "🟡" if conversion_rate >= 60 else "🔴"
-                st.metric("💯 Conversion Rate", f"{conv_status} {conversion_rate}%")
-            
-            st.markdown("---")
-            
-            # Calculate individual conversions
-            df['conversion'] = df.apply(
-                lambda x: round((x['reg_actual'] / x['pitches_actual'] * 100), 1) if x['pitches_actual'] > 0 else 0,
-                axis=1
-            )
-            
-            # Visualizations
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("#### 💯 RM-wise Conversion Rate")
-                fig1 = px.bar(
-                    df,
-                    x='rm_name',
-                    y='conversion',
-                    color='conversion',
-                    color_continuous_scale=['#D62828', '#F77F00', '#2A9D8F'],
-                    labels={'rm_name': 'RM Name', 'conversion': 'Conversion %'},
-                    text='conversion'
-                )
-                fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-                fig1.update_layout(showlegend=False, height=400, xaxis_title="", yaxis_title="Conversion %")
-                st.plotly_chart(fig1, use_container_width=True)
-            
-            with col2:
-                st.markdown("#### 🎯 Pitch vs Registration")
-                fig2 = go.Figure()
-                fig2.add_trace(go.Bar(
-                    name='Pitches',
-                    x=df['rm_name'],
-                    y=df['pitches_actual'],
-                    marker_color=IRONLADY_COLORS['success'],
-                    text=df['pitches_actual'],
-                    textposition='outside'
-                ))
-                fig2.add_trace(go.Bar(
-                    name='Registrations',
-                    x=df['rm_name'],
-                    y=df['reg_actual'],
-                    marker_color=IRONLADY_COLORS['primary'],
-                    text=df['reg_actual'],
-                    textposition='outside'
-                ))
-                fig2.update_layout(barmode='group', height=400, xaxis_title="", yaxis_title='Count')
-                st.plotly_chart(fig2, use_container_width=True)
-            
-            # Gauge Chart
-            st.markdown("#### 🎯 Overall Conversion Rate Gauge")
-            fig3 = go.Figure(go.Indicator(
-                mode="gauge+number+delta",
-                value=conversion_rate,
-                domain={'x': [0, 1], 'y': [0, 1]},
-                title={'text': "Team Conversion Rate", 'font': {'size': 24}},
-                delta={'reference': 75, 'increasing': {'color': "green"}},
-                gauge={
-                    'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
-                    'bar': {'color': IRONLADY_COLORS['primary']},
-                    'bgcolor': "white",
-                    'borderwidth': 2,
-                    'bordercolor': "gray",
-                    'steps': [
-                        {'range': [0, 60], 'color': '#f8d7da'},
-                        {'range': [60, 75], 'color': '#fff3cd'},
-                        {'range': [75, 100], 'color': '#d4edda'}
-                    ],
-                    'threshold': {
-                        'line': {'color': "red", 'width': 4},
-                        'thickness': 0.75,
-                        'value': 75
-                    }
-                }
-            ))
-            fig3.update_layout(height=400)
-            st.plotly_chart(fig3, use_container_width=True)
-            
-            # Pie Chart
-            st.markdown("#### 🥧 Registration Distribution")
-            fig4 = px.pie(
-                df,
-                values='reg_actual',
-                names='rm_name',
-                color_discrete_sequence=px.colors.sequential.RdBu
-            )
-            fig4.update_traces(textposition='inside', textinfo='percent+label')
-            fig4.update_layout(height=400)
-            st.plotly_chart(fig4, use_container_width=True)
+    # Quick actions
+    st.sidebar.markdown("<p style='color: white; font-weight: 700;'>⚡ QUICK ACTIONS</p>", unsafe_allow_html=True)
     
-    # ============================================
-    # TAB 3: GOOGLE SHEETS VIEWER
-    # ============================================
-    with tab3:
-        st.markdown("### 📋 GOOGLE SHEETS VIEWER")
-        
-        st.markdown("""
-        <div class="info-msg">
-            📊 <strong>View Live Data from Google Sheets</strong><br/>
-            Connect to your Google Sheet to display real-time data
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if not st.session_state.use_google_sheets or not st.session_state.sheet_id:
-            st.warning("⚠️ Enable Google Sheets and enter Sheet ID in the sidebar to use this feature")
-        else:
-            if st.button("🔄 Refresh Sheet Data", use_container_width=False):
-                with st.spinner("Loading from Google Sheets..."):
-                    sheet_data, error = fetch_sheet_data(st.session_state.sheet_id)
-                    if sheet_data:
-                        st.session_state.last_sheet_data = sheet_data
-                        st.success("✅ Data loaded successfully!")
-                        
-                        for sheet_name, df_sheet in sheet_data.items():
-                            with st.expander(f"📄 {sheet_name}", expanded=True):
-                                st.dataframe(df_sheet, use_container_width=True, height=400)
-                    else:
-                        st.error(f"❌ {error}")
-            
-            # Show last loaded data
-            if st.session_state.last_sheet_data:
-                st.markdown("---")
-                st.markdown("### 📊 LOADED SHEETS")
-                for sheet_name, df_sheet in st.session_state.last_sheet_data.items():
-                    with st.expander(f"📄 {sheet_name}", expanded=False):
-                        st.dataframe(df_sheet, use_container_width=True, height=400)
-    
-    # ============================================
-    # TAB 4: AI ANALYSIS
-    # ============================================
-    with tab4:
-        st.markdown("### 🤖 AI-POWERED ANALYSIS")
-        
-        current_data = st.session_state.user_data.get(user, [])
-        
-        if not current_data:
-            st.warning("⚠️ No data available for analysis. Add entries first.")
-        else:
-            df = pd.DataFrame(current_data)
-            
-            with st.spinner("🧠 Analyzing performance data..."):
-                insights = analyze_team_performance(df)
-            
-            # Performance Status
-            avg_conv = insights['avg_conversion']
-            if avg_conv >= 75:
-                status_msg = "Excellent"
-                status_color = "success"
-                status_icon = "✅"
-            elif avg_conv >= 60:
-                status_msg = "Good"
-                status_color = "warning"
-                status_icon = "⚠️"
+    if st.sidebar.button("🔄 Reload Google Sheets", use_container_width=True):
+        with st.spinner("Loading..."):
+            success, message = load_from_sheets()
+            if success:
+                st.sidebar.success(message)
             else:
-                status_msg = "Needs Improvement"
-                status_color = "error"
-                status_icon = "❌"
-            
-            st.markdown(f"""
-            <div class="{status_color}-msg" style="text-align: center;">
-                <h2 style="margin: 0; border: none;">{status_icon} {status_msg}</h2>
-                <p style="font-size: 1.2rem; margin: 10px 0 0 0;">Team Average Conversion: {avg_conv}%</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            st.markdown("---")
-            
-            # Key Metrics
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric("👥 Total RMs", insights['total_rms'])
-            
-            with col2:
-                st.metric("📞 Total Pitches", insights['total_pitches'])
-            
-            with col3:
-                st.metric("📝 Total Registrations", insights['total_registrations'])
-            
-            st.markdown("---")
-            
-            # Top & Bottom Performers
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("### ⭐ TOP PERFORMER")
-                if insights['best_performer']:
-                    bp = insights['best_performer']
-                    st.markdown(f"""
-                    <div class="success-msg">
-                        <h3 style="margin: 0 0 10px 0; border: none;">🏆 {bp['name']}</h3>
-                        <strong>Conversion Rate:</strong> {bp['conversion']}%<br/>
-                        <strong>Status:</strong> Outstanding Performance
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown("### 📉 NEEDS SUPPORT")
-                if insights['needs_support']:
-                    ns = insights['needs_support']
-                    st.markdown(f"""
-                    <div class="warning-msg">
-                        <h3 style="margin: 0 0 10px 0; border: none;">🎯 {ns['name']}</h3>
-                        <strong>Conversion Rate:</strong> {ns['conversion']}%<br/>
-                        <strong>Action:</strong> Provide coaching
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            st.markdown("---")
-            
-            # Recommendations
-            st.markdown("### 💡 STRATEGIC RECOMMENDATIONS")
-            for idx, rec in enumerate(insights['recommendations'], 1):
-                st.markdown(f"""
-                <div class="insight-box">
-                    <strong>#{idx}:</strong> {rec}
-                </div>
-                """, unsafe_allow_html=True)
+                st.sidebar.info(message)
     
-    # ============================================
-    # TAB 5: EMAIL REPORTS
-    # ============================================
-    with tab5:
-        st.markdown("### 📧 EMAIL REPORTS")
-        
-        current_data = st.session_state.user_data.get(user, [])
-        
-        if not current_data:
-            st.warning("⚠️ No data available to send. Add entries first.")
-        else:
-            st.markdown("""
-            <div class="info-msg">
-                📨 <strong>Send Professional Reports</strong><br/>
-                Email comprehensive performance reports to multiple recipients
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Check email config
-            email_configured = all([
-                "email_sender" in st.secrets,
-                "email_password" in st.secrets,
-                "email_smtp_server" in st.secrets,
-                "email_smtp_port" in st.secrets
-            ])
-            
-            if not email_configured:
-                st.markdown("""
-                <div class="warning-msg">
-                    ⚠️ <strong>Email Not Configured</strong><br/>
-                    Add email settings to your .streamlit/secrets.toml file:<br/><br/>
-                    <code>
-                    email_sender = "your-email@gmail.com"<br/>
-                    email_password = "your-app-password"<br/>
-                    email_smtp_server = "smtp.gmail.com"<br/>
-                    email_smtp_port = "587"
-                    </code>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                with st.expander("📖 Email Setup Guide"):
-                    st.markdown("""
-                    ### Gmail Setup (Recommended)
-                    
-                    1. **Enable 2-Factor Authentication** on your Gmail account
-                    2. Go to: https://myaccount.google.com/apppasswords
-                    3. Select "Mail" and your device
-                    4. **Copy the 16-character app password**
-                    5. Add to secrets.toml:
-                    
-                    ```toml
-                    email_sender = "your-email@gmail.com"
-                    email_password = "your-16-char-app-password"
-                    email_smtp_server = "smtp.gmail.com"
-                    email_smtp_port = "587"
-                    ```
-                    
-                    ### Other Email Providers
-                    
-                    **Outlook/Hotmail:**
-                    - SMTP Server: smtp-mail.outlook.com
-                    - Port: 587
-                    
-                    **Yahoo:**
-                    - SMTP Server: smtp.mail.yahoo.com
-                    - Port: 587
-                    
-                    **Office 365:**
-                    - SMTP Server: smtp.office365.com
-                    - Port: 587
-                    """)
-            else:
-                st.markdown("""
-                <div class="success-msg">
-                    ✅ <strong>Email Configured</strong><br/>
-                    Ready to send reports
-                </div>
-                """, unsafe_allow_html=True)
-            
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                recipient_emails = st.text_area(
-                    "Recipient Emails (comma or newline separated)",
-                    placeholder="manager@company.com, supervisor@company.com",
-                    height=100
-                )
-                
-                subject = st.text_input(
-                    "Email Subject",
-                    value=f"Performance Report - {user} - {datetime.now().strftime('%B %d, %Y')}"
-                )
-            
-            with col2:
-                st.markdown("<br/>", unsafe_allow_html=True)
-                if st.button("📧 SEND EMAIL", use_container_width=True, type="primary", disabled=not email_configured):
-                    if recipient_emails:
-                        emails = [e.strip() for e in recipient_emails.replace(',', '\n').split('\n') if e.strip()]
-                        
-                        if emails:
-                            with st.spinner("📤 Sending email..."):
-                                df = pd.DataFrame(current_data)
-                                insights = analyze_team_performance(df)
-                                
-                                success, message = send_email_report(emails, subject, df, insights, user)
-                                
-                                if success:
-                                    st.success(f"✅ {message}")
-                                    st.balloons()
-                                else:
-                                    st.error(f"❌ {message}")
-                        else:
-                            st.error("❌ Enter at least one valid email")
-                    else:
-                        st.error("❌ Enter recipient emails")
+    if st.sidebar.button("📊 Export My Data", use_container_width=True):
+        st.sidebar.info("Export feature - Coming soon!")
     
-    # ============================================
-    # TAB 6: DAILY CHECKLIST
-    # ============================================
-    with tab6:
-        st.markdown(f"### ✅ DAILY CHECKLIST - {day_type}")
-        
-        st.markdown(f"""
-        <div class="info-msg">
-            📋 <strong>Complete Your Daily Tasks</strong><br/>
-            Session: {session_date.strftime('%B %d, %Y')} | {day_type}<br/>
-            Track your progress and ensure all activities are completed
-        </div>
-        """, unsafe_allow_html=True)
-        
-        checklist = DAILY_CHECKLISTS.get(day_type, [])
-        
-        # Initialize checklist completion
-        checklist_key = f"{user}_{day_type}_{session_date.strftime('%Y%m%d')}"
-        if checklist_key not in st.session_state.checklist_completion:
-            st.session_state.checklist_completion[checklist_key] = [False] * len(checklist)
-        
-        completed = st.session_state.checklist_completion[checklist_key]
-        total_tasks = len(checklist)
-        completed_tasks = sum(completed)
-        completion_percentage = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
-        
-        # Progress Bar
-        st.markdown(f"""
-        <div class="metric">
-            <strong>Progress:</strong> {completed_tasks}/{total_tasks} tasks ({completion_percentage}%)<br/>
-            <div style="background: #e0e0e0; border-radius: 10px; height: 25px; margin-top: 10px;">
-                <div style="background: {IRONLADY_COLORS['primary']}; height: 100%; border-radius: 10px; width: {completion_percentage}%;"></div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
+    st.sidebar.markdown("---")
+    
+    # Logout
+    if st.sidebar.button("🚪 LOGOUT", use_container_width=True):
+        st.session_state.logged_in = False
+        st.session_state.current_user = None
+        st.rerun()
+    
+    # Footer
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(f"""
+    <div style='text-align: center; color: rgba(255,255,255,0.7); font-size: 0.8rem;'>
+        <p>© 2024 Iron Lady<br/>v12.0 - OCR/NER Edition</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ============================================
+# TAB 1: MY DASHBOARD
+# ============================================
+
+def show_my_dashboard():
+    """Show personal dashboard for logged-in user"""
+    
+    user = st.session_state.current_user
+    user_info = USERS[user]
+    
+    st.markdown(f"# 📊 {user_info['name']}'s Dashboard")
+    st.markdown(f"<p style='color: {IRONLADY_COLORS['secondary']}; font-size: 1.1rem;'>{user_info['role']} | Team Size: {user_info['team_size']} RMs</p>", unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Initialize user data if not exists
+    if user not in st.session_state.team_data:
+        st.session_state.team_data[user] = {
+            'total_rms': user_info['team_size'],
+            'total_pitches': 0,
+            'total_registrations': 0,
+            'conversion_rate': 0.0
+        }
+    
+    user_data = st.session_state.team_data[user]
+    
+    # Manual data entry
+    st.markdown("### ✏️ ENTER TODAY'S DATA")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        pitches = st.number_input("Total Pitches", min_value=0, value=user_data['total_pitches'], key=f"pitches_{user}")
+    
+    with col2:
+        registrations = st.number_input("Total Registrations", min_value=0, value=user_data['total_registrations'], key=f"regs_{user}")
+    
+    with col3:
+        conversion = round((registrations / pitches * 100), 1) if pitches > 0 else 0.0
+        st.metric("Conversion Rate", f"{conversion}%")
+    
+    if st.button("💾 SAVE DATA", use_container_width=True):
+        st.session_state.team_data[user] = {
+            'total_rms': user_info['team_size'],
+            'total_pitches': pitches,
+            'total_registrations': registrations,
+            'conversion_rate': conversion
+        }
+        st.success("✅ Data saved successfully!")
+    
+    st.markdown("---")
+    
+    # Display metrics
+    st.markdown("### 📈 TODAY'S PERFORMANCE")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("👥 Total RMs", user_data['total_rms'])
+    
+    with col2:
+        st.metric("📞 Total Pitches", user_data['total_pitches'])
+    
+    with col3:
+        st.metric("📝 Registrations", user_data['total_registrations'])
+    
+    with col4:
+        st.metric("💯 Conversion %", f"{user_data['conversion_rate']}%")
+    
+    # Performance chart
+    if user_data['total_pitches'] > 0:
         st.markdown("---")
+        st.markdown("### 📊 VISUAL BREAKDOWN")
         
-        # Display checklist items
-        for idx, item in enumerate(checklist):
-            priority_color = 'badge-high' if item['priority'] == 'High' else 'badge-medium'
-            
-            type_icons = {
-                'Upload': '📤',
-                'Manual': '✋',
-                'Ongoing': '🔄',
-                'Checkbox': '☑️',
-                'Text': '📝'
-            }
-            type_icon = type_icons.get(item['type'], '📋')
-            
-            col1, col2 = st.columns([0.1, 0.9])
-            
-            with col1:
-                is_checked = st.checkbox(
-                    "",
-                    value=completed[idx],
-                    key=f"check_{checklist_key}_{idx}"
-                )
-                st.session_state.checklist_completion[checklist_key][idx] = is_checked
-            
-            with col2:
-                st.markdown(f"""
-                <div class="checklist-item">
-                    <span class="badge {priority_color}">🔴 {item['priority']}</span>
-                    <span class="badge" style="background: #2A9D8F; color: white;">{type_icon} {item['type']}</span>
-                    <br/>
-                    <strong style="font-size: 1.05rem; {'text-decoration: line-through; opacity: 0.6;' if is_checked else ''}">{item['task']}</strong>
-                </div>
-                """, unsafe_allow_html=True)
+        fig = go.Figure(data=[go.Pie(
+            labels=['Pitches', 'Registrations'],
+            values=[user_data['total_pitches'] - user_data['total_registrations'], user_data['total_registrations']],
+            hole=.3,
+            marker_colors=[IRONLADY_COLORS['info'], IRONLADY_COLORS['success']]
+        )])
         
-        st.markdown("---")
+        fig.update_layout(
+            title="Pitches vs Registrations",
+            showlegend=True,
+            height=400
+        )
         
-        # Action Buttons
-        col1, col2, col3 = st.columns(3)
+        st.plotly_chart(fig, use_container_width=True)
+
+# ============================================
+# TAB 2: TEAM PERFORMANCE
+# ============================================
+
+def show_team_performance():
+    """Show overall team performance"""
+    
+    st.markdown("# 🏆 TEAM PERFORMANCE DASHBOARD")
+    st.markdown("---")
+    
+    # Create DataFrame from all team data
+    team_data_list = []
+    for username, user_info in USERS.items():
+        if username in st.session_state.team_data:
+            data = st.session_state.team_data[username]
+            team_data_list.append({
+                'Team Leader': user_info['name'],
+                'Role': user_info['role'],
+                'Total RMs': data['total_rms'],
+                'Total Pitches': data['total_pitches'],
+                'Total Registrations': data['total_registrations'],
+                'Conversion %': data['conversion_rate']
+            })
+    
+    if team_data_list:
+        df = pd.DataFrame(team_data_list)
+        
+        # Summary metrics
+        st.markdown("### 📊 OVERALL SUMMARY")
+        
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            if st.button("🔄 Reset Checklist", use_container_width=True):
-                st.session_state.checklist_completion[checklist_key] = [False] * len(checklist)
-                st.rerun()
+            st.metric("👥 Total RMs", df['Total RMs'].sum())
         
         with col2:
-            if st.button("✅ Mark All Complete", use_container_width=True):
-                st.session_state.checklist_completion[checklist_key] = [True] * len(checklist)
-                st.rerun()
+            st.metric("📞 Total Pitches", df['Total Pitches'].sum())
         
         with col3:
-            if completion_percentage == 100:
-                st.success("🎉 All tasks completed!")
+            st.metric("📝 Total Registrations", df['Total Registrations'].sum())
+        
+        with col4:
+            avg_conversion = round((df['Total Registrations'].sum() / df['Total Pitches'].sum() * 100), 1) if df['Total Pitches'].sum() > 0 else 0
+            st.metric("💯 Avg Conversion", f"{avg_conversion}%")
+        
+        st.markdown("---")
+        
+        # Team comparison table
+        st.markdown("### 📋 TEAM LEADER COMPARISON")
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        
+        st.markdown("---")
+        
+        # Charts
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig1 = px.bar(df, x='Team Leader', y='Total Pitches', 
+                         color='Role',
+                         title="Pitches by Team Leader",
+                         color_discrete_map={
+                             'Senior Team Leader': IRONLADY_COLORS['primary'],
+                             'Trainee Team Leader': IRONLADY_COLORS['info']
+                         })
+            st.plotly_chart(fig1, use_container_width=True)
+        
+        with col2:
+            fig2 = px.bar(df, x='Team Leader', y='Conversion %',
+                         title="Conversion Rate by Team Leader",
+                         color='Conversion %',
+                         color_continuous_scale=['red', 'yellow', 'green'])
+            st.plotly_chart(fig2, use_container_width=True)
     
-    # ============================================
-    # FOOTER
-    # ============================================
+    else:
+        st.info("📝 No team data available yet. Team leaders need to enter their data first!")
+
+# ============================================
+# TAB 3: ANALYTICS
+# ============================================
+
+def show_analytics():
+    """Show advanced analytics"""
+    
+    st.markdown("# 📈 ADVANCED ANALYTICS")
     st.markdown("---")
+    
+    team_data_list = []
+    for username, user_info in USERS.items():
+        if username in st.session_state.team_data:
+            data = st.session_state.team_data[username]
+            team_data_list.append({
+                'Team Leader': user_info['name'],
+                'Total Pitches': data['total_pitches'],
+                'Total Registrations': data['total_registrations'],
+                'Conversion %': data['conversion_rate']
+            })
+    
+    if team_data_list:
+        df = pd.DataFrame(team_data_list)
+        
+        # Performance insights
+        st.markdown("### 🎯 PERFORMANCE INSIGHTS")
+        
+        best_performer = df.loc[df['Conversion %'].idxmax()]
+        total_pitches = df['Total Pitches'].sum()
+        total_regs = df['Total Registrations'].sum()
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown(f"""
+            <div class="success-msg">
+                <h4 style="margin: 0;">🏆 Top Performer</h4>
+                <p style="margin: 0.5rem 0 0 0;"><strong>{best_performer['Team Leader']}</strong> with {best_performer['Conversion %']}% conversion rate</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            target_conversion = 15.0
+            current_conversion = round((total_regs / total_pitches * 100), 1) if total_pitches > 0 else 0
+            
+            if current_conversion >= target_conversion:
+                msg_type = "success-msg"
+                icon = "✅"
+                text = "On Target!"
+            else:
+                msg_type = "warning-msg"
+                icon = "⚠️"
+                text = "Below Target"
+            
+            st.markdown(f"""
+            <div class="{msg_type}">
+                <h4 style="margin: 0;">{icon} Target Status</h4>
+                <p style="margin: 0.5rem 0 0 0;">Current: {current_conversion}% | Target: {target_conversion}% - {text}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Trend analysis
+        st.markdown("### 📊 CONVERSION RATE DISTRIBUTION")
+        
+        fig = px.histogram(df, x='Conversion %', 
+                          title="Distribution of Conversion Rates",
+                          color_discrete_sequence=[IRONLADY_COLORS['primary']])
+        st.plotly_chart(fig, use_container_width=True)
+        
+    else:
+        st.info("📝 No analytics data available yet.")
+
+# ============================================
+# TAB 4: DOCUMENT UPLOAD WITH OCR/NER
+# ============================================
+
+def show_document_upload():
+    """Enhanced document upload with OCR and NER"""
+    
+    st.markdown("### 📁 DOCUMENT MANAGEMENT WITH OCR/NER")
+    
     st.markdown(f"""
-    <div style="text-align: center; padding: 30px; background: linear-gradient(135deg, {IRONLADY_COLORS['secondary']} 0%, {IRONLADY_COLORS['primary']} 100%); border-radius: 15px; color: white;">
-        <p style="margin: 0; font-weight: 900; font-size: 1.5rem;">IRON LADY</p>
-        <p style="margin: 10px 0 0 0;">Sales Performance Management System</p>
-        <p style="margin: 10px 0 0 0; font-size: 0.9rem;">Team: Ghazala 🏆 | Megha 🏆 | Afreen 🌟 | Soumya 🌟</p>
-        <p style="margin: 15px 0 0 0; font-size: 0.85rem; opacity: 0.7;">© 2024 Iron Lady | v11.0 Complete Fixed Edition</p>
+    <div class="info-msg">
+        📤 <strong>Upload & Analyze Documents</strong><br/>
+        • Upload screenshots, PDFs, images<br/>
+        • Automatic text extraction (OCR)<br/>
+        • Entity recognition (names, dates, numbers)<br/>
+        • Metric extraction (pitches, registrations, leads)<br/>
+        • All results included in email reports
     </div>
     """, unsafe_allow_html=True)
+    
+    # Check availability
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        status = "✅ Available" if OCR_AVAILABLE else "❌ Not installed"
+        st.metric("OCR Status", status)
+    with col2:
+        status = "✅ Available" if NER_AVAILABLE else "❌ Not installed"
+        st.metric("NER Status", status)
+    with col3:
+        status = "✅ Available" if CV2_AVAILABLE else "❌ Not installed"
+        st.metric("Image Processing", status)
+    
+    if not OCR_AVAILABLE:
+        st.warning("⚠️ To enable OCR: `pip install pytesseract pillow opencv-python`")
+        st.info("💡 Also install Tesseract: https://github.com/tesseract-ocr/tesseract")
+    
+    if not NER_AVAILABLE:
+        st.warning("⚠️ To enable NER: `pip install spacy && python -m spacy download en_core_web_sm`")
+    
+    st.markdown("---")
+    
+    # File upload section
+    st.markdown("### 📤 UPLOAD DOCUMENTS")
+    
+    upload_categories = {
+        'WA Audit Screenshots': 'wa_audit',
+        'SL Status Screenshots': 'sl_status',
+        'Call Audit Screenshots': 'call_audit',
+        'Performance Reports': 'reports',
+        'Other Documents': 'other'
+    }
+    
+    selected_category = st.selectbox("Select Category", list(upload_categories.keys()))
+    category_key = upload_categories[selected_category]
+    
+    uploaded_files = st.file_uploader(
+        f"Upload files for {selected_category}",
+        accept_multiple_files=True,
+        type=['png', 'jpg', 'jpeg', 'pdf', 'docx', 'xlsx'],
+        key=f"uploader_{category_key}"
+    )
+    
+    if uploaded_files:
+        user = st.session_state.current_user
+        
+        if user not in st.session_state.uploaded_documents:
+            st.session_state.uploaded_documents[user] = {}
+        
+        if category_key not in st.session_state.uploaded_documents[user]:
+            st.session_state.uploaded_documents[user][category_key] = []
+        
+        for uploaded_file in uploaded_files:
+            file_details = {
+                'name': uploaded_file.name,
+                'size': uploaded_file.size,
+                'type': uploaded_file.type,
+                'upload_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'category': selected_category
+            }
+            
+            # Process image files with OCR
+            if uploaded_file.type.startswith('image/'):
+                st.markdown(f"#### 🖼️ Processing: {uploaded_file.name}")
+                
+                # Display image
+                image = Image.open(uploaded_file)
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    st.image(image, caption=uploaded_file.name, use_column_width=True)
+                
+                with col2:
+                    if OCR_AVAILABLE:
+                        with st.spinner("🔍 Extracting text with OCR..."):
+                            text, error = extract_text_from_image(image)
+                            
+                            if text:
+                                st.success("✅ OCR Complete")
+                                
+                                # Store OCR result
+                                file_details['ocr_text'] = text
+                                file_details['has_ocr'] = True
+                                
+                                # Show extracted text
+                                with st.expander("📄 Extracted Text", expanded=True):
+                                    st.text_area("OCR Output", text, height=200, key=f"ocr_{uploaded_file.name}")
+                                
+                                # NER Analysis
+                                if NER_AVAILABLE and text.strip():
+                                    with st.spinner("🧠 Analyzing entities..."):
+                                        entities, error = extract_entities(text)
+                                        
+                                        if entities:
+                                            file_details['entities'] = entities
+                                            file_details['has_ner'] = True
+                                            
+                                            st.markdown("##### 🎯 Extracted Entities")
+                                            
+                                            # Display entities in columns
+                                            ent_col1, ent_col2 = st.columns(2)
+                                            
+                                            with ent_col1:
+                                                if entities.get('PERSON'):
+                                                    st.markdown("**👤 People:**")
+                                                    for person in entities['PERSON']:
+                                                        st.markdown(f"- {person}")
+                                                
+                                                if entities.get('DATE'):
+                                                    st.markdown("**📅 Dates:**")
+                                                    for date in entities['DATE']:
+                                                        st.markdown(f"- {date}")
+                                                
+                                                if entities.get('PHONE'):
+                                                    st.markdown("**📞 Phone Numbers:**")
+                                                    for phone in entities['PHONE']:
+                                                        st.markdown(f"- {phone}")
+                                            
+                                            with ent_col2:
+                                                if entities.get('ORG'):
+                                                    st.markdown("**🏢 Organizations:**")
+                                                    for org in entities['ORG']:
+                                                        st.markdown(f"- {org}")
+                                                
+                                                if entities.get('CARDINAL'):
+                                                    st.markdown("**🔢 Numbers:**")
+                                                    for num in entities['CARDINAL'][:5]:  # Show first 5
+                                                        st.markdown(f"- {num}")
+                                                
+                                                if entities.get('EMAIL'):
+                                                    st.markdown("**📧 Emails:**")
+                                                    for email in entities['EMAIL']:
+                                                        st.markdown(f"- {email}")
+                                        
+                                        # Extract metrics
+                                        metrics = extract_metrics_from_text(text)
+                                        if any(metrics.values()):
+                                            file_details['metrics'] = metrics
+                                            
+                                            st.markdown("##### 📊 Detected Metrics")
+                                            met_cols = st.columns(4)
+                                            
+                                            with met_cols[0]:
+                                                if metrics['pitches']:
+                                                    st.metric("Pitches", metrics['pitches'][0])
+                                            with met_cols[1]:
+                                                if metrics['registrations']:
+                                                    st.metric("Registrations", metrics['registrations'][0])
+                                            with met_cols[2]:
+                                                if metrics['leads']:
+                                                    st.metric("Leads", metrics['leads'][0])
+                                            with met_cols[3]:
+                                                if metrics['rms']:
+                                                    st.metric("RMs", metrics['rms'][0])
+                            else:
+                                st.warning(f"⚠️ Could not extract text: {error}")
+                    else:
+                        st.info("💡 OCR not available. Install pytesseract to extract text.")
+            
+            else:
+                # Non-image files
+                st.markdown(f"✅ **{uploaded_file.name}** ({uploaded_file.size / 1024:.1f} KB)")
+            
+            # Store file details
+            st.session_state.uploaded_documents[user][category_key].append(file_details)
+        
+        st.success(f"✅ Processed {len(uploaded_files)} file(s)")
+        st.markdown("---")
+    
+    # Display all uploaded documents
+    user = st.session_state.current_user
+    if user in st.session_state.uploaded_documents:
+        st.markdown("### 📋 UPLOADED DOCUMENTS")
+        
+        all_docs = []
+        for category, docs in st.session_state.uploaded_documents[user].items():
+            all_docs.extend(docs)
+        
+        if all_docs:
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Total Files", len(all_docs))
+            with col2:
+                ocr_count = sum(1 for doc in all_docs if doc.get('has_ocr'))
+                st.metric("OCR Processed", ocr_count)
+            with col3:
+                ner_count = sum(1 for doc in all_docs if doc.get('has_ner'))
+                st.metric("NER Analyzed", ner_count)
+            with col4:
+                metrics_count = sum(1 for doc in all_docs if doc.get('metrics'))
+                st.metric("Metrics Found", metrics_count)
+            
+            st.markdown("---")
+            
+            # Create DataFrame
+            df_docs = pd.DataFrame(all_docs)
+            
+            # Display table
+            display_cols = ['name', 'category', 'upload_time', 'size']
+            display_df = df_docs[display_cols].copy()
+            display_df['size'] = display_df['size'].apply(lambda x: f"{x/1024:.1f} KB")
+            display_df.columns = ['File Name', 'Category', 'Upload Time', 'Size']
+            
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            
+            # Download button for OCR results
+            if ocr_count > 0:
+                st.markdown("#### 📥 EXPORT OCR RESULTS")
+                
+                # Create export data
+                export_data = []
+                for doc in all_docs:
+                    if doc.get('has_ocr'):
+                        export_data.append({
+                            'File Name': doc['name'],
+                            'Category': doc['category'],
+                            'Upload Time': doc['upload_time'],
+                            'Extracted Text': doc.get('ocr_text', ''),
+                            'Entities': json.dumps(doc.get('entities', {})),
+                            'Metrics': json.dumps(doc.get('metrics', {}))
+                        })
+                
+                if export_data:
+                    export_df = pd.DataFrame(export_data)
+                    csv = export_df.to_csv(index=False)
+                    
+                    st.download_button(
+                        "⬇️ Download OCR Results (CSV)",
+                        data=csv,
+                        file_name=f"ocr_results_{user}_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+            
+            # Clear button
+            if st.button("🗑️ Clear All Documents", use_container_width=True):
+                st.session_state.uploaded_documents[user] = {}
+                st.success("✅ All documents cleared")
+                st.rerun()
+        
+        else:
+            st.info("📝 No documents uploaded yet")
+
+# ============================================
+# TAB 5: AI INSIGHTS
+# ============================================
+
+def show_ai_insights():
+    """Show AI-powered insights"""
+    
+    st.markdown("# 🤖 AI-POWERED INSIGHTS")
+    st.markdown("---")
+    
+    team_data_list = []
+    for username, user_info in USERS.items():
+        if username in st.session_state.team_data:
+            data = st.session_state.team_data[username]
+            team_data_list.append({
+                'Team Leader': user_info['name'],
+                'Pitches': data['total_pitches'],
+                'Registrations': data['total_registrations'],
+                'Conversion %': data['conversion_rate']
+            })
+    
+    if team_data_list:
+        df = pd.DataFrame(team_data_list)
+        
+        # AI Recommendations
+        st.markdown("### 🎯 PERSONALIZED RECOMMENDATIONS")
+        
+        for _, row in df.iterrows():
+            with st.expander(f"📊 {row['Team Leader']}'s Action Plan", expanded=True):
+                conversion = row['Conversion %']
+                
+                if conversion >= 15:
+                    st.markdown(f"""
+                    <div class="success-msg">
+                        <h4>✅ Excellent Performance!</h4>
+                        <p>Conversion rate: {conversion}% (Target: 15%)</p>
+                        <p><strong>Keep it up! Here's how to maintain momentum:</strong></p>
+                        <ul>
+                            <li>Document your best practices</li>
+                            <li>Share techniques with the team</li>
+                            <li>Focus on quality leads</li>
+                            <li>Maintain consistent follow-up</li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif conversion >= 10:
+                    st.markdown(f"""
+                    <div class="warning-msg">
+                        <h4>⚠️ Good Progress, Room for Improvement</h4>
+                        <p>Conversion rate: {conversion}% (Target: 15%)</p>
+                        <p><strong>Recommendations:</strong></p>
+                        <ul>
+                            <li>Analyze successful vs unsuccessful pitches</li>
+                            <li>Improve pitch quality over quantity</li>
+                            <li>Enhance follow-up strategy</li>
+                            <li>Focus on warm leads first</li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class="warning-msg">
+                        <h4>🎯 Action Required</h4>
+                        <p>Conversion rate: {conversion}% (Target: 15%)</p>
+                        <p><strong>Priority Actions:</strong></p>
+                        <ul>
+                            <li><strong>Immediate:</strong> Review pitch script and techniques</li>
+                            <li><strong>This Week:</strong> Additional training sessions</li>
+                            <li><strong>Ongoing:</strong> Daily coaching and feedback</li>
+                            <li><strong>Focus:</strong> Quality over quantity</li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Team insights
+        st.markdown("### 📈 TEAM-WIDE INSIGHTS")
+        
+        total_pitches = df['Pitches'].sum()
+        total_regs = df['Registrations'].sum()
+        avg_conversion = round((total_regs / total_pitches * 100), 1) if total_pitches > 0 else 0
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown(f"""
+            <div class="info-msg">
+                <h4>📊 Team Performance</h4>
+                <p><strong>Total Pitches:</strong> {total_pitches}</p>
+                <p><strong>Total Registrations:</strong> {total_regs}</p>
+                <p><strong>Team Conversion:</strong> {avg_conversion}%</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            best = df.loc[df['Conversion %'].idxmax()]
+            st.markdown(f"""
+            <div class="success-msg">
+                <h4>🏆 Best Practices From</h4>
+                <p><strong>{best['Team Leader']}</strong></p>
+                <p>Conversion Rate: {best['Conversion %']}%</p>
+                <p><em>Schedule knowledge sharing session!</em></p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    else:
+        st.info("📝 No data available for AI insights yet.")
+
+# ============================================
+# TAB 6: DAILY CHECKLIST
+# ============================================
+
+def show_daily_checklist():
+    """Show daily checklist"""
+    
+    st.markdown("# ✅ DAILY CHECKLIST")
+    st.markdown("---")
+    
+    user = st.session_state.current_user
+    
+    # Day type selector
+    day_type = st.selectbox("Select Day Type", list(DAILY_CHECKLISTS.keys()))
+    
+    st.markdown(f"### 📋 {day_type} Checklist")
+    
+    # Initialize checklist state for user
+    if user not in st.session_state.checklist_state:
+        st.session_state.checklist_state[user] = {}
+    
+    if day_type not in st.session_state.checklist_state[user]:
+        st.session_state.checklist_state[user][day_type] = {}
+    
+    tasks = DAILY_CHECKLISTS[day_type]['tasks']
+    completed_count = 0
+    
+    # Display tasks
+    for idx, task in enumerate(tasks):
+        task_key = f"{user}_{day_type}_{idx}"
+        
+        # Get completion status
+        is_completed = st.session_state.checklist_state[user][day_type].get(idx, False)
+        
+        if is_completed:
+            completed_count += 1
+        
+        # Task row
+        col1, col2, col3, col4 = st.columns([0.5, 3, 1, 1])
+        
+        with col1:
+            checkbox = st.checkbox("", value=is_completed, key=task_key)
+            st.session_state.checklist_state[user][day_type][idx] = checkbox
+        
+        with col2:
+            style = "text-decoration: line-through; opacity: 0.6;" if is_completed else ""
+            st.markdown(f"<p style='{style}'>{task['name']}</p>", unsafe_allow_html=True)
+        
+        with col3:
+            priority_color = {
+                'high': IRONLADY_COLORS['primary'],
+                'medium': IRONLADY_COLORS['warning']
+            }
+            color = priority_color.get(task['priority'], IRONLADY_COLORS['info'])
+            st.markdown(f"<span style='background: {color}; color: white; padding: 2px 8px; border-radius: 3px; font-size: 0.8rem;'>{task['priority'].upper()}</span>", unsafe_allow_html=True)
+        
+        with col4:
+            type_icons = {
+                'upload': '📤',
+                'manual': '✍️',
+                'ongoing': '🔄'
+            }
+            icon = type_icons.get(task['type'], '📝')
+            st.markdown(f"<span style='font-size: 0.9rem;'>{icon} {task['type']}</span>", unsafe_allow_html=True)
+    
+    # Progress
+    progress = (completed_count / len(tasks)) * 100
+    
+    st.markdown("---")
+    st.markdown("### 📊 PROGRESS")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Completed", f"{completed_count}/{len(tasks)}")
+    
+    with col2:
+        st.metric("Progress", f"{progress:.0f}%")
+    
+    with col3:
+        if progress == 100:
+            st.success("🎉 All Done!")
+        elif progress >= 50:
+            st.info("💪 Keep Going!")
+        else:
+            st.warning("⚡ Let's Start!")
+    
+    st.progress(progress / 100)
+    
+    # Actions
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("✅ Mark All Complete", use_container_width=True):
+            for idx in range(len(tasks)):
+                st.session_state.checklist_state[user][day_type][idx] = True
+            st.success("✅ All tasks marked complete!")
+            st.rerun()
+    
+    with col2:
+        if st.button("🔄 Reset Checklist", use_container_width=True):
+            st.session_state.checklist_state[user][day_type] = {}
+            st.success("🔄 Checklist reset!")
+            st.rerun()
 
 # ============================================
 # MAIN APP
 # ============================================
 
 def main():
-    init_session_state()
+    """Main application"""
     
     if not st.session_state.logged_in:
-        show_login_page()
+        show_login()
     else:
-        show_dashboard()
+        show_sidebar()
+        
+        # Main content tabs
+        tabs = st.tabs([
+            "📊 My Dashboard",
+            "🏆 Team Performance",
+            "📈 Analytics",
+            "📁 Documents (OCR/NER)",
+            "🤖 AI Insights",
+            "✅ Daily Checklist"
+        ])
+        
+        with tabs[0]:
+            show_my_dashboard()
+        
+        with tabs[1]:
+            show_team_performance()
+        
+        with tabs[2]:
+            show_analytics()
+        
+        with tabs[3]:
+            show_document_upload()
+        
+        with tabs[4]:
+            show_ai_insights()
+        
+        with tabs[5]:
+            show_daily_checklist()
 
 if __name__ == "__main__":
     main()

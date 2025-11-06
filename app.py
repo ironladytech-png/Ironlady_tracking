@@ -399,8 +399,104 @@ def extract_metrics_from_text(text):
 # GOOGLE SHEETS INTEGRATION
 # ============================================
 
+def parse_team_sheet(worksheet):
+    """Parse a team leader's worksheet with complex structure"""
+    try:
+        all_data = worksheet.get_all_values()
+        
+        # Find the team leader name from the sheet
+        team_name = None
+        for row in all_data[:10]:
+            if row[1] and ('-' in row[1] or 'Rising' in row[1] or 'Winners' in row[1] or 'Flyers' in row[1] or 'Getters' in row[1]):
+                team_name = row[1]
+                break
+        
+        # Initialize aggregates
+        total_wa_audit = 0
+        total_call_audit = 0
+        total_mocks = 0
+        total_sl_calls = 0
+        total_registrations = 0
+        total_pitches = 0
+        total_current_mc = 0
+        rm_count = 0
+        
+        # Parse each row looking for achieved values
+        for row in all_data:
+            if len(row) < 15:
+                continue
+            
+            # Check if this is a data row (has RM name and numbers)
+            rm_name = row[1] if len(row) > 1 else ''
+            
+            # Skip header rows and team name rows
+            if not rm_name or 'RM Name' in rm_name or 'Target' in rm_name or 'Achieved' in rm_name:
+                continue
+            if team_name and team_name in rm_name:
+                continue
+            
+            # Try to extract achieved values from various columns
+            try:
+                # WA Audit Achieved (column D, index 3)
+                if len(row) > 3 and row[3] and row[3].strip() and row[3].strip().isdigit():
+                    total_wa_audit += int(row[3])
+                
+                # Call Audit Achieved (column F, index 5)
+                if len(row) > 5 and row[5] and row[5].strip() and row[5].strip().isdigit():
+                    total_call_audit += int(row[5])
+                
+                # Mocks Achieved (column H, index 7)
+                if len(row) > 7 and row[7] and row[7].strip() and row[7].strip().isdigit():
+                    total_mocks += int(row[7])
+                
+                # SL Calls Achieved (column J, index 9)
+                if len(row) > 9 and row[9] and row[9].strip() and row[9].strip().isdigit():
+                    total_sl_calls += int(row[9])
+                
+                # Follow ups Registrations Achieved (column L, index 11)
+                if len(row) > 11 and row[11] and row[11].strip():
+                    val = row[11].strip()
+                    # Extract number even if it has text (like "1-Shwetha")
+                    num = re.findall(r'\d+', val)
+                    if num:
+                        total_registrations += int(num[0])
+                
+                # Pitches Achieved (column N, index 13)
+                if len(row) > 13 and row[13] and row[13].strip() and row[13].strip().isdigit():
+                    total_pitches += int(row[13])
+                
+                # Current MC Registrations Achieved (column P, index 15)
+                if len(row) > 15 and row[15] and row[15].strip() and row[15].strip().isdigit():
+                    total_current_mc += int(row[15])
+                
+                # Count this RM if they have any data
+                if any([row[3], row[5], row[7], row[9], row[11], row[13], row[15]]):
+                    rm_count += 1
+            except:
+                continue
+        
+        # Calculate conversion rate
+        conversion_rate = round((total_registrations / total_pitches * 100), 1) if total_pitches > 0 else 0.0
+        
+        return {
+            'team_name': team_name,
+            'total_rms': rm_count,
+            'total_wa_audit': total_wa_audit,
+            'total_call_audit': total_call_audit,
+            'total_mocks': total_mocks,
+            'total_sl_calls': total_sl_calls,
+            'total_pitches': total_pitches,
+            'total_registrations': total_registrations,
+            'total_current_mc': total_current_mc,
+            'conversion_rate': conversion_rate
+        }
+    
+    except Exception as e:
+        st.error(f"Error parsing sheet: {e}")
+        return None
+
 def load_from_sheets():
-    """Load data from Google Sheets"""
+    """Load data from Google Sheets with multiple team sheets"""
     try:
         import gspread
         from google.oauth2.service_account import Credentials
@@ -421,26 +517,45 @@ def load_from_sheets():
                 
                 client = gspread.authorize(credentials)
                 spreadsheet = client.open_by_key(sheet_id)
-                worksheet = spreadsheet.sheet1
                 
-                data = worksheet.get_all_records()
+                # Get all worksheets
+                worksheets = spreadsheet.worksheets()
                 
-                if data:
-                    df = pd.DataFrame(data)
+                # Map worksheet names to team leaders
+                sheet_mapping = {
+                    'Ghazala': 'ghazala',
+                    'Megha': 'megha',
+                    'Afreen': 'afreen',
+                    'Soumya': 'soumya'
+                }
+                
+                loaded_count = 0
+                
+                # Parse each team leader's sheet
+                for worksheet in worksheets:
+                    sheet_title = worksheet.title
                     
-                    # Store in session state by team leader
-                    for _, row in df.iterrows():
-                        team_leader = row.get('Team_Leader', '').lower()
-                        if team_leader in USERS:
-                            st.session_state.team_data[team_leader] = {
-                                'total_rms': int(row.get('Total_RMs', 0)),
-                                'total_pitches': int(row.get('Total_Pitches', 0)),
-                                'total_registrations': int(row.get('Total_Registrations', 0)),
-                                'conversion_rate': float(row.get('Conversion_Rate', 0))
-                            }
+                    # Find matching team leader
+                    username = None
+                    for sheet_name, user in sheet_mapping.items():
+                        if sheet_name.lower() in sheet_title.lower():
+                            username = user
+                            break
                     
+                    if username and username in USERS:
+                        # Parse the sheet
+                        data = parse_team_sheet(worksheet)
+                        
+                        if data:
+                            # Store in session state
+                            st.session_state.team_data[username] = data
+                            loaded_count += 1
+                
+                if loaded_count > 0:
                     st.session_state.sheets_data_loaded = True
-                    return True, "Data loaded from Google Sheets successfully!"
+                    return True, f"Data loaded from {loaded_count} team sheets successfully!"
+                else:
+                    return False, "No data found in sheets"
         
         return False, "Google Sheets not configured"
     
@@ -573,76 +688,175 @@ def show_my_dashboard():
     # Initialize user data if not exists
     if user not in st.session_state.team_data:
         st.session_state.team_data[user] = {
+            'team_name': user_info['name'],
             'total_rms': user_info['team_size'],
+            'total_wa_audit': 0,
+            'total_call_audit': 0,
+            'total_mocks': 0,
+            'total_sl_calls': 0,
             'total_pitches': 0,
             'total_registrations': 0,
+            'total_current_mc': 0,
             'conversion_rate': 0.0
         }
     
     user_data = st.session_state.team_data[user]
     
-    # Manual data entry
-    st.markdown("### ✏️ ENTER TODAY'S DATA")
+    # Show if data is loaded from sheets
+    if st.session_state.sheets_data_loaded and user in st.session_state.team_data:
+        st.markdown("""
+        <div class="success-msg">
+            ✅ Data loaded from Google Sheets
+        </div>
+        """, unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        pitches = st.number_input("Total Pitches", min_value=0, value=user_data['total_pitches'], key=f"pitches_{user}")
-    
-    with col2:
-        registrations = st.number_input("Total Registrations", min_value=0, value=user_data['total_registrations'], key=f"regs_{user}")
-    
-    with col3:
-        conversion = round((registrations / pitches * 100), 1) if pitches > 0 else 0.0
-        st.metric("Conversion Rate", f"{conversion}%")
-    
-    if st.button("💾 SAVE DATA", use_container_width=True):
-        st.session_state.team_data[user] = {
-            'total_rms': user_info['team_size'],
-            'total_pitches': pitches,
-            'total_registrations': registrations,
-            'conversion_rate': conversion
-        }
-        st.success("✅ Data saved successfully!")
+    # Manual data entry (can override Google Sheets data)
+    with st.expander("✏️ MANUAL DATA ENTRY", expanded=not st.session_state.sheets_data_loaded):
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            wa_audit = st.number_input("WA Audit", min_value=0, value=user_data.get('total_wa_audit', 0), key=f"wa_{user}")
+        
+        with col2:
+            call_audit = st.number_input("Call Audit", min_value=0, value=user_data.get('total_call_audit', 0), key=f"ca_{user}")
+        
+        with col3:
+            mocks = st.number_input("Mocks", min_value=0, value=user_data.get('total_mocks', 0), key=f"mocks_{user}")
+        
+        with col4:
+            sl_calls = st.number_input("SL Calls", min_value=0, value=user_data.get('total_sl_calls', 0), key=f"sl_{user}")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            pitches = st.number_input("Total Pitches", min_value=0, value=user_data.get('total_pitches', 0), key=f"pitches_{user}")
+        
+        with col2:
+            registrations = st.number_input("Total Registrations", min_value=0, value=user_data.get('total_registrations', 0), key=f"regs_{user}")
+        
+        with col3:
+            current_mc = st.number_input("Current MC Registrations", min_value=0, value=user_data.get('total_current_mc', 0), key=f"mc_{user}")
+        
+        if st.button("💾 SAVE DATA", use_container_width=True):
+            conversion = round((registrations / pitches * 100), 1) if pitches > 0 else 0.0
+            st.session_state.team_data[user] = {
+                'team_name': user_data.get('team_name', user_info['name']),
+                'total_rms': user_info['team_size'],
+                'total_wa_audit': wa_audit,
+                'total_call_audit': call_audit,
+                'total_mocks': mocks,
+                'total_sl_calls': sl_calls,
+                'total_pitches': pitches,
+                'total_registrations': registrations,
+                'total_current_mc': current_mc,
+                'conversion_rate': conversion
+            }
+            st.success("✅ Data saved successfully!")
+            st.rerun()
     
     st.markdown("---")
     
-    # Display metrics
-    st.markdown("### 📈 TODAY'S PERFORMANCE")
+    # Display all metrics
+    st.markdown("### 📈 CURRENT PERFORMANCE")
+    
+    # Row 1: Core metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("👥 Total RMs", user_data.get('total_rms', 0))
+    
+    with col2:
+        st.metric("📞 Total Pitches", user_data.get('total_pitches', 0))
+    
+    with col3:
+        st.metric("📝 Registrations", user_data.get('total_registrations', 0))
+    
+    with col4:
+        st.metric("💯 Conversion %", f"{user_data.get('conversion_rate', 0)}%")
+    
+    st.markdown("---")
+    
+    # Row 2: Activity metrics
+    st.markdown("### 📊 ACTIVITY BREAKDOWN")
     
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("👥 Total RMs", user_data['total_rms'])
+        st.metric("💬 WA Audit", user_data.get('total_wa_audit', 0))
     
     with col2:
-        st.metric("📞 Total Pitches", user_data['total_pitches'])
+        st.metric("📞 Call Audit", user_data.get('total_call_audit', 0))
     
     with col3:
-        st.metric("📝 Registrations", user_data['total_registrations'])
+        st.metric("🎯 Mocks", user_data.get('total_mocks', 0))
     
     with col4:
-        st.metric("💯 Conversion %", f"{user_data['conversion_rate']}%")
+        st.metric("📋 SL Calls", user_data.get('total_sl_calls', 0))
+    
+    st.markdown("---")
+    
+    # Row 3: Additional metrics
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("🎓 Current MC Regs", user_data.get('total_current_mc', 0))
+    
+    with col2:
+        if user_data.get('team_name'):
+            st.markdown(f"**Team Name:** {user_data['team_name']}")
+    
+    with col3:
+        if user_data.get('total_pitches', 0) > 0:
+            success_rate = round((user_data.get('total_registrations', 0) / user_data.get('total_pitches', 0) * 100), 1)
+            if success_rate >= 15:
+                st.markdown("**Status:** ✅ On Target")
+            else:
+                st.markdown(f"**Status:** ⚠️ Below Target ({15 - success_rate:.1f}% gap)")
     
     # Performance chart
-    if user_data['total_pitches'] > 0:
+    if user_data.get('total_pitches', 0) > 0:
         st.markdown("---")
         st.markdown("### 📊 VISUAL BREAKDOWN")
         
-        fig = go.Figure(data=[go.Pie(
-            labels=['Pitches', 'Registrations'],
-            values=[user_data['total_pitches'] - user_data['total_registrations'], user_data['total_registrations']],
-            hole=.3,
-            marker_colors=[IRONLADY_COLORS['info'], IRONLADY_COLORS['success']]
-        )])
+        col1, col2 = st.columns(2)
         
-        fig.update_layout(
-            title="Pitches vs Registrations",
-            showlegend=True,
-            height=400
-        )
+        with col1:
+            # Pitches vs Registrations
+            fig1 = go.Figure(data=[go.Pie(
+                labels=['Unsuccessful Pitches', 'Registrations'],
+                values=[user_data['total_pitches'] - user_data['total_registrations'], user_data['total_registrations']],
+                hole=.3,
+                marker_colors=[IRONLADY_COLORS['info'], IRONLADY_COLORS['success']]
+            )])
+            
+            fig1.update_layout(
+                title="Conversion Funnel",
+                showlegend=True,
+                height=350
+            )
+            
+            st.plotly_chart(fig1, use_container_width=True)
         
-        st.plotly_chart(fig, use_container_width=True)
+        with col2:
+            # Activity breakdown
+            activity_data = {
+                'Activity': ['WA Audit', 'Call Audit', 'Mocks', 'SL Calls'],
+                'Count': [
+                    user_data.get('total_wa_audit', 0),
+                    user_data.get('total_call_audit', 0),
+                    user_data.get('total_mocks', 0),
+                    user_data.get('total_sl_calls', 0)
+                ]
+            }
+            
+            fig2 = px.bar(activity_data, x='Activity', y='Count',
+                         title="Activity Breakdown",
+                         color='Activity',
+                         color_discrete_sequence=[IRONLADY_COLORS['primary'], IRONLADY_COLORS['warning'], 
+                                                 IRONLADY_COLORS['success'], IRONLADY_COLORS['info']])
+            fig2.update_layout(height=350, showlegend=False)
+            
+            st.plotly_chart(fig2, use_container_width=True)
 
 # ============================================
 # TAB 2: TEAM PERFORMANCE
@@ -661,11 +875,17 @@ def show_team_performance():
             data = st.session_state.team_data[username]
             team_data_list.append({
                 'Team Leader': user_info['name'],
+                'Team Name': data.get('team_name', user_info['name']),
                 'Role': user_info['role'],
-                'Total RMs': data['total_rms'],
-                'Total Pitches': data['total_pitches'],
-                'Total Registrations': data['total_registrations'],
-                'Conversion %': data['conversion_rate']
+                'Total RMs': data.get('total_rms', 0),
+                'WA Audit': data.get('total_wa_audit', 0),
+                'Call Audit': data.get('total_call_audit', 0),
+                'Mocks': data.get('total_mocks', 0),
+                'SL Calls': data.get('total_sl_calls', 0),
+                'Total Pitches': data.get('total_pitches', 0),
+                'Total Registrations': data.get('total_registrations', 0),
+                'Current MC': data.get('total_current_mc', 0),
+                'Conversion %': data.get('conversion_rate', 0)
             })
     
     if team_data_list:
@@ -674,25 +894,49 @@ def show_team_performance():
         # Summary metrics
         st.markdown("### 📊 OVERALL SUMMARY")
         
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
-            st.metric("👥 Total RMs", df['Total RMs'].sum())
+            st.metric("👥 Total RMs", int(df['Total RMs'].sum()))
         
         with col2:
-            st.metric("📞 Total Pitches", df['Total Pitches'].sum())
+            st.metric("📞 Total Pitches", int(df['Total Pitches'].sum()))
         
         with col3:
-            st.metric("📝 Total Registrations", df['Total Registrations'].sum())
+            st.metric("📝 Total Registrations", int(df['Total Registrations'].sum()))
         
         with col4:
             avg_conversion = round((df['Total Registrations'].sum() / df['Total Pitches'].sum() * 100), 1) if df['Total Pitches'].sum() > 0 else 0
             st.metric("💯 Avg Conversion", f"{avg_conversion}%")
         
+        with col5:
+            st.metric("🎓 Total MC Regs", int(df['Current MC'].sum()))
+        
+        st.markdown("---")
+        
+        # Activity summary
+        st.markdown("### 📋 ACTIVITY SUMMARY")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("💬 Total WA Audit", int(df['WA Audit'].sum()))
+        
+        with col2:
+            st.metric("📞 Total Call Audit", int(df['Call Audit'].sum()))
+        
+        with col3:
+            st.metric("🎯 Total Mocks", int(df['Mocks'].sum()))
+        
+        with col4:
+            st.metric("📋 Total SL Calls", int(df['SL Calls'].sum()))
+        
         st.markdown("---")
         
         # Team comparison table
-        st.markdown("### 📋 TEAM LEADER COMPARISON")
+        st.markdown("### 📋 DETAILED TEAM COMPARISON")
+        
+        # Display full table
         st.dataframe(df, use_container_width=True, hide_index=True)
         
         st.markdown("---")
@@ -716,9 +960,33 @@ def show_team_performance():
                          color='Conversion %',
                          color_continuous_scale=['red', 'yellow', 'green'])
             st.plotly_chart(fig2, use_container_width=True)
+        
+        # Additional charts
+        st.markdown("---")
+        st.markdown("### 📊 ACTIVITY COMPARISON")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            activity_df = df[['Team Leader', 'WA Audit', 'Call Audit', 'Mocks', 'SL Calls']].melt(
+                id_vars='Team Leader', 
+                var_name='Activity', 
+                value_name='Count'
+            )
+            fig3 = px.bar(activity_df, x='Team Leader', y='Count', color='Activity',
+                         title="Activity Breakdown by Team Leader",
+                         barmode='group')
+            st.plotly_chart(fig3, use_container_width=True)
+        
+        with col2:
+            fig4 = px.scatter(df, x='Total Pitches', y='Total Registrations',
+                            size='Conversion %', color='Team Leader',
+                            title="Pitches vs Registrations (size = conversion %)",
+                            hover_data=['Team Name'])
+            st.plotly_chart(fig4, use_container_width=True)
     
     else:
-        st.info("📝 No team data available yet. Team leaders need to enter their data first!")
+        st.info("📝 No team data available yet. Team leaders need to enter their data first or load from Google Sheets!")
 
 # ============================================
 # TAB 3: ANALYTICS
@@ -736,9 +1004,12 @@ def show_analytics():
             data = st.session_state.team_data[username]
             team_data_list.append({
                 'Team Leader': user_info['name'],
-                'Total Pitches': data['total_pitches'],
-                'Total Registrations': data['total_registrations'],
-                'Conversion %': data['conversion_rate']
+                'Total Pitches': data.get('total_pitches', 0),
+                'Total Registrations': data.get('total_registrations', 0),
+                'Conversion %': data.get('conversion_rate', 0),
+                'WA Audit': data.get('total_wa_audit', 0),
+                'Call Audit': data.get('total_call_audit', 0),
+                'SL Calls': data.get('total_sl_calls', 0)
             })
     
     if team_data_list:
@@ -751,7 +1022,7 @@ def show_analytics():
         total_pitches = df['Total Pitches'].sum()
         total_regs = df['Total Registrations'].sum()
         
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             st.markdown(f"""
@@ -781,6 +1052,47 @@ def show_analytics():
             </div>
             """, unsafe_allow_html=True)
         
+        with col3:
+            most_active = df.loc[df['SL Calls'].idxmax()]
+            st.markdown(f"""
+            <div class="info-msg">
+                <h4 style="margin: 0;">⚡ Most Active</h4>
+                <p style="margin: 0.5rem 0 0 0;"><strong>{most_active['Team Leader']}</strong> with {int(most_active['SL Calls'])} SL calls</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Activity efficiency
+        st.markdown("### 📊 ACTIVITY EFFICIENCY")
+        
+        # Calculate efficiency metrics
+        df['Audit Efficiency'] = df.apply(
+            lambda row: round((row['Total Registrations'] / (row['WA Audit'] + row['Call Audit'])) * 100, 1) 
+            if (row['WA Audit'] + row['Call Audit']) > 0 else 0, axis=1
+        )
+        
+        df['Call Efficiency'] = df.apply(
+            lambda row: round((row['Total Registrations'] / row['SL Calls']) * 100, 1)
+            if row['SL Calls'] > 0 else 0, axis=1
+        )
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig1 = px.bar(df, x='Team Leader', y='Audit Efficiency',
+                         title="Audit Efficiency (Regs per 100 Audits)",
+                         color='Audit Efficiency',
+                         color_continuous_scale='Blues')
+            st.plotly_chart(fig1, use_container_width=True)
+        
+        with col2:
+            fig2 = px.bar(df, x='Team Leader', y='Call Efficiency',
+                         title="Call Efficiency (Regs per 100 SL Calls)",
+                         color='Call Efficiency',
+                         color_continuous_scale='Greens')
+            st.plotly_chart(fig2, use_container_width=True)
+        
         st.markdown("---")
         
         # Trend analysis
@@ -789,6 +1101,18 @@ def show_analytics():
         fig = px.histogram(df, x='Conversion %', 
                           title="Distribution of Conversion Rates",
                           color_discrete_sequence=[IRONLADY_COLORS['primary']])
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Correlation analysis
+        st.markdown("---")
+        st.markdown("### 🔗 ACTIVITY CORRELATION")
+        
+        corr_data = df[['WA Audit', 'Call Audit', 'SL Calls', 'Total Pitches', 'Total Registrations']].corr()
+        
+        fig = px.imshow(corr_data, 
+                       title="Correlation Matrix",
+                       color_continuous_scale='RdBu',
+                       aspect='auto')
         st.plotly_chart(fig, use_container_width=True)
         
     else:
@@ -1074,9 +1398,12 @@ def show_ai_insights():
             data = st.session_state.team_data[username]
             team_data_list.append({
                 'Team Leader': user_info['name'],
-                'Pitches': data['total_pitches'],
-                'Registrations': data['total_registrations'],
-                'Conversion %': data['conversion_rate']
+                'Pitches': data.get('total_pitches', 0),
+                'Registrations': data.get('total_registrations', 0),
+                'Conversion %': data.get('conversion_rate', 0),
+                'WA Audit': data.get('total_wa_audit', 0),
+                'Call Audit': data.get('total_call_audit', 0),
+                'SL Calls': data.get('total_sl_calls', 0)
             })
     
     if team_data_list:
@@ -1089,6 +1416,10 @@ def show_ai_insights():
             with st.expander(f"📊 {row['Team Leader']}'s Action Plan", expanded=True):
                 conversion = row['Conversion %']
                 
+                # Calculate activity ratios
+                total_audits = row['WA Audit'] + row['Call Audit']
+                audit_to_pitch_ratio = round((total_audits / row['Pitches']) * 100, 1) if row['Pitches'] > 0 else 0
+                
                 if conversion >= 15:
                     st.markdown(f"""
                     <div class="success-msg">
@@ -1096,10 +1427,10 @@ def show_ai_insights():
                         <p>Conversion rate: {conversion}% (Target: 15%)</p>
                         <p><strong>Keep it up! Here's how to maintain momentum:</strong></p>
                         <ul>
-                            <li>Document your best practices</li>
-                            <li>Share techniques with the team</li>
-                            <li>Focus on quality leads</li>
-                            <li>Maintain consistent follow-up</li>
+                            <li>📝 Document your best practices for WA Audit ({int(row['WA Audit'])}) and Call Audit ({int(row['Call Audit'])})</li>
+                            <li>🤝 Share techniques with the team - your SL Calls ({int(row['SL Calls'])}) approach is working!</li>
+                            <li>✅ Focus on quality leads</li>
+                            <li>📞 Maintain consistent follow-up</li>
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1108,12 +1439,17 @@ def show_ai_insights():
                     <div class="warning-msg">
                         <h4>⚠️ Good Progress, Room for Improvement</h4>
                         <p>Conversion rate: {conversion}% (Target: 15%)</p>
+                        <p><strong>Audit Activity Analysis:</strong></p>
+                        <ul>
+                            <li>WA Audit: {int(row['WA Audit'])} | Call Audit: {int(row['Call Audit'])} | SL Calls: {int(row['SL Calls'])}</li>
+                            <li>Audit-to-Pitch Ratio: {audit_to_pitch_ratio}%</li>
+                        </ul>
                         <p><strong>Recommendations:</strong></p>
                         <ul>
-                            <li>Analyze successful vs unsuccessful pitches</li>
-                            <li>Improve pitch quality over quantity</li>
-                            <li>Enhance follow-up strategy</li>
-                            <li>Focus on warm leads first</li>
+                            <li>📊 Analyze successful vs unsuccessful pitches</li>
+                            <li>💡 Improve pitch quality over quantity</li>
+                            <li>📈 Increase WA Audit frequency (target: {int(row['WA Audit'] * 1.2)}+)</li>
+                            <li>🎯 Focus on warm leads from SL calls</li>
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1122,12 +1458,16 @@ def show_ai_insights():
                     <div class="warning-msg">
                         <h4>🎯 Action Required</h4>
                         <p>Conversion rate: {conversion}% (Target: 15%)</p>
+                        <p><strong>Current Activity Levels:</strong></p>
+                        <ul>
+                            <li>WA Audit: {int(row['WA Audit'])} | Call Audit: {int(row['Call Audit'])} | SL Calls: {int(row['SL Calls'])}</li>
+                        </ul>
                         <p><strong>Priority Actions:</strong></p>
                         <ul>
                             <li><strong>Immediate:</strong> Review pitch script and techniques</li>
-                            <li><strong>This Week:</strong> Additional training sessions</li>
-                            <li><strong>Ongoing:</strong> Daily coaching and feedback</li>
-                            <li><strong>Focus:</strong> Quality over quantity</li>
+                            <li><strong>This Week:</strong> Increase WA Audit to 15+ and Call Audit to 10+</li>
+                            <li><strong>Daily:</strong> Conduct 10+ SL calls with proper follow-up</li>
+                            <li><strong>Focus:</strong> Quality audits lead to better pitches</li>
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1141,15 +1481,22 @@ def show_ai_insights():
         total_regs = df['Registrations'].sum()
         avg_conversion = round((total_regs / total_pitches * 100), 1) if total_pitches > 0 else 0
         
+        total_wa = df['WA Audit'].sum()
+        total_ca = df['Call Audit'].sum()
+        total_sl = df['SL Calls'].sum()
+        
         col1, col2 = st.columns(2)
         
         with col1:
             st.markdown(f"""
             <div class="info-msg">
                 <h4>📊 Team Performance</h4>
-                <p><strong>Total Pitches:</strong> {total_pitches}</p>
-                <p><strong>Total Registrations:</strong> {total_regs}</p>
+                <p><strong>Pitches:</strong> {int(total_pitches)}</p>
+                <p><strong>Registrations:</strong> {int(total_regs)}</p>
                 <p><strong>Team Conversion:</strong> {avg_conversion}%</p>
+                <hr style="margin: 10px 0;">
+                <p><strong>Activity Totals:</strong></p>
+                <p>WA Audits: {int(total_wa)} | Call Audits: {int(total_ca)} | SL Calls: {int(total_sl)}</p>
             </div>
             """, unsafe_allow_html=True)
         
@@ -1160,7 +1507,13 @@ def show_ai_insights():
                 <h4>🏆 Best Practices From</h4>
                 <p><strong>{best['Team Leader']}</strong></p>
                 <p>Conversion Rate: {best['Conversion %']}%</p>
-                <p><em>Schedule knowledge sharing session!</em></p>
+                <p>Activity Profile:</p>
+                <ul>
+                    <li>WA Audit: {int(best['WA Audit'])}</li>
+                    <li>Call Audit: {int(best['Call Audit'])}</li>
+                    <li>SL Calls: {int(best['SL Calls'])}</li>
+                </ul>
+                <p><em>📚 Schedule knowledge sharing session!</em></p>
             </div>
             """, unsafe_allow_html=True)
     

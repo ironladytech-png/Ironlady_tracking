@@ -64,6 +64,34 @@ st.set_page_config(
 )
 
 # ============================================
+# TEMPORARY DEBUG: Check Secrets Configuration
+# ============================================
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🔍 DEBUG MODE")
+if st.sidebar.checkbox("Show Secrets Debug", value=True):
+    st.sidebar.markdown("**Secrets Status:**")
+    
+    if 'GOOGLE_SHEETS_CREDENTIALS' in st.secrets:
+        st.sidebar.success("✅ CREDENTIALS found")
+        creds = st.secrets['GOOGLE_SHEETS_CREDENTIALS']
+        st.sidebar.text(f"Type: {creds.get('type', 'MISSING')}")
+        st.sidebar.text(f"Project: {creds.get('project_id', 'MISSING')}")
+        st.sidebar.text(f"Email: {creds.get('client_email', 'MISSING')[:30]}...")
+    else:
+        st.sidebar.error("❌ CREDENTIALS missing")
+    
+    if 'GOOGLE_SHEET_ID' in st.secrets:
+        st.sidebar.success(f"✅ SHEET_ID found")
+        st.sidebar.text(f"ID: {st.secrets['GOOGLE_SHEET_ID'][:20]}...")
+    else:
+        st.sidebar.error("❌ SHEET_ID missing")
+        st.sidebar.text("Keys in secrets:")
+        for key in st.secrets.keys():
+            st.sidebar.text(f"  - {key}")
+st.sidebar.markdown("---")
+# ============================================
+
+# ============================================
 # IRON LADY BRANDING & STYLING
 # ============================================
 

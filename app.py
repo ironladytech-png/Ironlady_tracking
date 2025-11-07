@@ -676,8 +676,22 @@ def show_sidebar():
             success, message = load_from_sheets()
             if success:
                 st.sidebar.success(message)
+                st.rerun()
             else:
                 st.sidebar.info(message)
+    
+    # Debug: Show loaded data
+    if st.session_state.sheets_data_loaded:
+        with st.sidebar.expander("🔍 View Loaded Data (Debug)"):
+            for username in USERS.keys():
+                if username in st.session_state.team_data:
+                    data = st.session_state.team_data[username]
+                    st.write(f"**{USERS[username]['name']}:**")
+                    st.write(f"- Pitches: {data.get('total_pitches', 0)}")
+                    st.write(f"- Registrations: {data.get('total_registrations', 0)}")
+                    st.write(f"- WA Audit: {data.get('total_wa_audit', 0)}")
+                    st.write(f"- Call Audit: {data.get('total_call_audit', 0)}")
+                    st.write("---")
     
     if st.sidebar.button("📊 Export My Data", use_container_width=True):
         st.sidebar.info("Export feature - Coming soon!")
@@ -1639,7 +1653,7 @@ def show_daily_checklist():
     
     # Actions
     st.markdown("---")
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         if st.button("✅ Mark All Complete", use_container_width=True):
@@ -1653,6 +1667,30 @@ def show_daily_checklist():
             st.session_state.checklist_state[user][day_type] = {}
             st.success("🔄 Checklist reset!")
             st.rerun()
+    
+    with col3:
+        # Download checklist state
+        checklist_json = json.dumps(st.session_state.checklist_state, indent=2)
+        st.download_button(
+            label="💾 Save Progress",
+            data=checklist_json,
+            file_name=f"checklist_{user}_{datetime.now().strftime('%Y%m%d')}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    
+    # Upload saved checklist
+    st.markdown("---")
+    st.markdown("### 📤 Restore Saved Progress")
+    uploaded_checklist = st.file_uploader("Upload saved checklist JSON", type=['json'], key="checklist_upload")
+    if uploaded_checklist:
+        try:
+            saved_data = json.load(uploaded_checklist)
+            st.session_state.checklist_state = saved_data
+            st.success("✅ Checklist progress restored!")
+            st.rerun()
+        except:
+            st.error("❌ Invalid checklist file")
 
 # ============================================
 # MAIN APP

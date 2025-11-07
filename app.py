@@ -64,34 +64,6 @@ st.set_page_config(
 )
 
 # ============================================
-# TEMPORARY DEBUG: Check Secrets Configuration
-# ============================================
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔍 DEBUG MODE")
-if st.sidebar.checkbox("Show Secrets Debug", value=True):
-    st.sidebar.markdown("**Secrets Status:**")
-    
-    if 'GOOGLE_SHEETS_CREDENTIALS' in st.secrets:
-        st.sidebar.success("✅ CREDENTIALS found")
-        creds = st.secrets['GOOGLE_SHEETS_CREDENTIALS']
-        st.sidebar.text(f"Type: {creds.get('type', 'MISSING')}")
-        st.sidebar.text(f"Project: {creds.get('project_id', 'MISSING')}")
-        st.sidebar.text(f"Email: {creds.get('client_email', 'MISSING')[:30]}...")
-    else:
-        st.sidebar.error("❌ CREDENTIALS missing")
-    
-    if 'GOOGLE_SHEET_ID' in st.secrets:
-        st.sidebar.success(f"✅ SHEET_ID found")
-        st.sidebar.text(f"ID: {st.secrets['GOOGLE_SHEET_ID'][:20]}...")
-    else:
-        st.sidebar.error("❌ SHEET_ID missing")
-        st.sidebar.text("Keys in secrets:")
-        for key in st.secrets.keys():
-            st.sidebar.text(f"  - {key}")
-st.sidebar.markdown("---")
-# ============================================
-
-# ============================================
 # IRON LADY BRANDING & STYLING
 # ============================================
 
@@ -244,7 +216,7 @@ USERS = {
         'password': 'ironlady2024',
         'name': 'Ghazala',
         'role': 'Senior Team Leader',
-        'team_size': 8
+        'team_size': 7
     },
     'megha': {
         'password': 'ironlady2024',
@@ -680,19 +652,6 @@ def show_sidebar():
             else:
                 st.sidebar.info(message)
     
-    # Debug: Show loaded data
-    if st.session_state.sheets_data_loaded:
-        with st.sidebar.expander("🔍 View Loaded Data (Debug)"):
-            for username in USERS.keys():
-                if username in st.session_state.team_data:
-                    data = st.session_state.team_data[username]
-                    st.write(f"**{USERS[username]['name']}:**")
-                    st.write(f"- Pitches: {data.get('total_pitches', 0)}")
-                    st.write(f"- Registrations: {data.get('total_registrations', 0)}")
-                    st.write(f"- WA Audit: {data.get('total_wa_audit', 0)}")
-                    st.write(f"- Call Audit: {data.get('total_call_audit', 0)}")
-                    st.write("---")
-    
     if st.sidebar.button("📊 Export My Data", use_container_width=True):
         st.sidebar.info("Export feature - Coming soon!")
     
@@ -717,7 +676,7 @@ def show_sidebar():
 # ============================================
 
 def show_my_dashboard():
-    """Show personal dashboard for logged-in user"""
+    """Show embedded Google Sheet for logged-in user"""
     
     user = st.session_state.current_user
     user_info = USERS[user]
@@ -727,296 +686,115 @@ def show_my_dashboard():
     
     st.markdown("---")
     
-    # Initialize user data if not exists
-    if user not in st.session_state.team_data:
-        st.session_state.team_data[user] = {
-            'team_name': user_info['name'],
-            'total_rms': user_info['team_size'],
-            'total_wa_audit': 0,
-            'total_call_audit': 0,
-            'total_mocks': 0,
-            'total_sl_calls': 0,
-            'total_pitches': 0,
-            'total_registrations': 0,
-            'total_current_mc': 0,
-            'conversion_rate': 0.0
+    # Get sheet ID from secrets
+    if 'GOOGLE_SHEET_ID' in st.secrets:
+        sheet_id = st.secrets['GOOGLE_SHEET_ID']
+        
+        # Map username to sheet GID (tab ID)
+        # You'll need to find the gid for each sheet tab
+        sheet_gids = {
+            'ghazala': '0',  # Replace with actual GID for Ghazala tab
+            'megha': '1511743141',  # From your screenshot URL
+            'afreen': '2077016974',  # From your screenshot URL
+            'soumya': '1686874932'  # From your screenshot URL
         }
-    
-    user_data = st.session_state.team_data[user]
-    
-    # Show if data is loaded from sheets
-    if st.session_state.sheets_data_loaded and user in st.session_state.team_data:
-        st.markdown("""
-        <div class="success-msg">
-            ✅ Data loaded from Google Sheets
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Manual data entry (can override Google Sheets data)
-    with st.expander("✏️ MANUAL DATA ENTRY", expanded=not st.session_state.sheets_data_loaded):
-        col1, col2, col3, col4 = st.columns(4)
         
-        with col1:
-            wa_audit = st.number_input("WA Audit", min_value=0, value=user_data.get('total_wa_audit', 0), key=f"wa_{user}")
+        gid = sheet_gids.get(user, '0')
         
-        with col2:
-            call_audit = st.number_input("Call Audit", min_value=0, value=user_data.get('total_call_audit', 0), key=f"ca_{user}")
+        # Create embed URL
+        embed_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit?gid={gid}&rm=minimal&single=true&widget=false"
         
-        with col3:
-            mocks = st.number_input("Mocks", min_value=0, value=user_data.get('total_mocks', 0), key=f"mocks_{user}")
+        # Display instructions
+        st.info("📝 **Tip:** Click on the sheet below to edit directly in Google Sheets. Changes save automatically!")
         
-        with col4:
-            sl_calls = st.number_input("SL Calls", min_value=0, value=user_data.get('total_sl_calls', 0), key=f"sl_{user}")
+        # Embed the Google Sheet
+        st.markdown(
+            f'''
+            <iframe 
+                src="{embed_url}" 
+                width="100%" 
+                height="800" 
+                frameborder="0"
+                style="border: 2px solid {IRONLADY_COLORS['primary']}; border-radius: 10px;"
+            ></iframe>
+            ''',
+            unsafe_allow_html=True
+        )
         
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            pitches = st.number_input("Total Pitches", min_value=0, value=user_data.get('total_pitches', 0), key=f"pitches_{user}")
-        
-        with col2:
-            registrations = st.number_input("Total Registrations", min_value=0, value=user_data.get('total_registrations', 0), key=f"regs_{user}")
-        
-        with col3:
-            current_mc = st.number_input("Current MC Registrations", min_value=0, value=user_data.get('total_current_mc', 0), key=f"mc_{user}")
-        
-        if st.button("💾 SAVE DATA", use_container_width=True):
-            conversion = round((registrations / pitches * 100), 1) if pitches > 0 else 0.0
-            st.session_state.team_data[user] = {
-                'team_name': user_data.get('team_name', user_info['name']),
-                'total_rms': user_info['team_size'],
-                'total_wa_audit': wa_audit,
-                'total_call_audit': call_audit,
-                'total_mocks': mocks,
-                'total_sl_calls': sl_calls,
-                'total_pitches': pitches,
-                'total_registrations': registrations,
-                'total_current_mc': current_mc,
-                'conversion_rate': conversion
-            }
-            st.success("✅ Data saved successfully!")
-            st.rerun()
-    
-    st.markdown("---")
-    
-    # Display all metrics
-    st.markdown("### 📈 CURRENT PERFORMANCE")
-    
-    # Row 1: Core metrics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("👥 Total RMs", user_data.get('total_rms', 0))
-    
-    with col2:
-        st.metric("📞 Total Pitches", user_data.get('total_pitches', 0))
-    
-    with col3:
-        st.metric("📝 Registrations", user_data.get('total_registrations', 0))
-    
-    with col4:
-        st.metric("💯 Conversion %", f"{user_data.get('conversion_rate', 0)}%")
-    
-    st.markdown("---")
-    
-    # Row 2: Activity metrics
-    st.markdown("### 📊 ACTIVITY BREAKDOWN")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("💬 WA Audit", user_data.get('total_wa_audit', 0))
-    
-    with col2:
-        st.metric("📞 Call Audit", user_data.get('total_call_audit', 0))
-    
-    with col3:
-        st.metric("🎯 Mocks", user_data.get('total_mocks', 0))
-    
-    with col4:
-        st.metric("📋 SL Calls", user_data.get('total_sl_calls', 0))
-    
-    st.markdown("---")
-    
-    # Row 3: Additional metrics
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("🎓 Current MC Regs", user_data.get('total_current_mc', 0))
-    
-    with col2:
-        if user_data.get('team_name'):
-            st.markdown(f"**Team Name:** {user_data['team_name']}")
-    
-    with col3:
-        if user_data.get('total_pitches', 0) > 0:
-            success_rate = round((user_data.get('total_registrations', 0) / user_data.get('total_pitches', 0) * 100), 1)
-            if success_rate >= 15:
-                st.markdown("**Status:** ✅ On Target")
-            else:
-                st.markdown(f"**Status:** ⚠️ Below Target ({15 - success_rate:.1f}% gap)")
-    
-    # Performance chart
-    if user_data.get('total_pitches', 0) > 0:
         st.markdown("---")
-        st.markdown("### 📊 VISUAL BREAKDOWN")
         
-        col1, col2 = st.columns(2)
+        # Quick link to open in new tab
+        full_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit?gid={gid}"
+        st.markdown(f"[🔗 Open Full Sheet in New Tab]({full_url})")
         
-        with col1:
-            # Pitches vs Registrations
-            fig1 = go.Figure(data=[go.Pie(
-                labels=['Unsuccessful Pitches', 'Registrations'],
-                values=[user_data['total_pitches'] - user_data['total_registrations'], user_data['total_registrations']],
-                hole=.3,
-                marker_colors=[IRONLADY_COLORS['info'], IRONLADY_COLORS['success']]
-            )])
-            
-            fig1.update_layout(
-                title="Conversion Funnel",
-                showlegend=True,
-                height=350
-            )
-            
-            st.plotly_chart(fig1, use_container_width=True)
-        
-        with col2:
-            # Activity breakdown
-            activity_data = {
-                'Activity': ['WA Audit', 'Call Audit', 'Mocks', 'SL Calls'],
-                'Count': [
-                    user_data.get('total_wa_audit', 0),
-                    user_data.get('total_call_audit', 0),
-                    user_data.get('total_mocks', 0),
-                    user_data.get('total_sl_calls', 0)
-                ]
-            }
-            
-            fig2 = px.bar(activity_data, x='Activity', y='Count',
-                         title="Activity Breakdown",
-                         color='Activity',
-                         color_discrete_sequence=[IRONLADY_COLORS['primary'], IRONLADY_COLORS['warning'], 
-                                                 IRONLADY_COLORS['success'], IRONLADY_COLORS['info']])
-            fig2.update_layout(height=350, showlegend=False)
-            
-            st.plotly_chart(fig2, use_container_width=True)
+    else:
+        st.error("❌ Google Sheet not configured. Please add GOOGLE_SHEET_ID to secrets.")
+        st.info("**Temporary workaround:** Use the direct link to your Google Sheet")
 
 # ============================================
 # TAB 2: TEAM PERFORMANCE
 # ============================================
 
 def show_team_performance():
-    """Show overall team performance"""
+    """Show all team sheets"""
     
-    st.markdown("# 🏆 TEAM PERFORMANCE DASHBOARD")
+    st.markdown("# 🏆 ALL TEAM SHEETS")
     st.markdown("---")
     
-    # Create DataFrame from all team data
-    team_data_list = []
-    for username, user_info in USERS.items():
-        if username in st.session_state.team_data:
-            data = st.session_state.team_data[username]
-            team_data_list.append({
-                'Team Leader': user_info['name'],
-                'Team Name': data.get('team_name', user_info['name']),
-                'Role': user_info['role'],
-                'Total RMs': data.get('total_rms', 0),
-                'WA Audit': data.get('total_wa_audit', 0),
-                'Call Audit': data.get('total_call_audit', 0),
-                'Mocks': data.get('total_mocks', 0),
-                'SL Calls': data.get('total_sl_calls', 0),
-                'Total Pitches': data.get('total_pitches', 0),
-                'Total Registrations': data.get('total_registrations', 0),
-                'Current MC': data.get('total_current_mc', 0),
-                'Conversion %': data.get('conversion_rate', 0)
-            })
+    if 'GOOGLE_SHEET_ID' not in st.secrets:
+        st.error("❌ Google Sheet not configured")
+        return
     
-    if team_data_list:
-        df = pd.DataFrame(team_data_list)
-        
-        # Summary metrics
-        st.markdown("### 📊 OVERALL SUMMARY")
-        
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        with col1:
-            st.metric("👥 Total RMs", int(df['Total RMs'].sum()))
-        
-        with col2:
-            st.metric("📞 Total Pitches", int(df['Total Pitches'].sum()))
-        
-        with col3:
-            st.metric("📝 Total Registrations", int(df['Total Registrations'].sum()))
-        
-        with col4:
-            avg_conversion = round((df['Total Registrations'].sum() / df['Total Pitches'].sum() * 100), 1) if df['Total Pitches'].sum() > 0 else 0
-            st.metric("💯 Avg Conversion", f"{avg_conversion}%")
-        
-        with col5:
-            st.metric("🎓 Total MC Regs", int(df['Current MC'].sum()))
-        
-        st.markdown("---")
-        
-        # Activity summary
-        st.markdown("### 📋 ACTIVITY SUMMARY")
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("💬 Total WA Audit", int(df['WA Audit'].sum()))
-        
-        with col2:
-            st.metric("📞 Total Call Audit", int(df['Call Audit'].sum()))
-        
-        with col3:
-            st.metric("🎯 Total Mocks", int(df['Mocks'].sum()))
-        
-        with col4:
-            st.metric("📋 Total SL Calls", int(df['SL Calls'].sum()))
-        
-        st.markdown("---")
-        
-        # Team comparison table
-        st.markdown("### 📋 DETAILED TEAM COMPARISON")
-        
-        # Display full table
-        st.dataframe(df, use_container_width=True, hide_index=True)
-        
-        st.markdown("---")
-        
-        # Charts
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            fig1 = px.bar(df, x='Team Leader', y='Total Pitches', 
-                         color='Role',
-                         title="Pitches by Team Leader",
-                         color_discrete_map={
-                             'Senior Team Leader': IRONLADY_COLORS['primary'],
-                             'Trainee Team Leader': IRONLADY_COLORS['info']
-                         })
-            st.plotly_chart(fig1, use_container_width=True)
-        
-        with col2:
-            fig2 = px.bar(df, x='Team Leader', y='Conversion %',
-                         title="Conversion Rate by Team Leader",
-                         color='Conversion %',
-                         color_continuous_scale=['red', 'yellow', 'green'])
-            st.plotly_chart(fig2, use_container_width=True)
-        
-        # Additional charts
-        st.markdown("---")
-        st.markdown("### 📊 ACTIVITY COMPARISON")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            activity_df = df[['Team Leader', 'WA Audit', 'Call Audit', 'Mocks', 'SL Calls']].melt(
-                id_vars='Team Leader', 
-                var_name='Activity', 
-                value_name='Count'
+    sheet_id = st.secrets['GOOGLE_SHEET_ID']
+    
+    # Team sheets with GIDs
+    teams = {
+        'Ghazala - Rising Stars': {
+            'gid': '0',
+            'color': IRONLADY_COLORS['primary']
+        },
+        'Megha - Winners': {
+            'gid': '1511743141',
+            'color': IRONLADY_COLORS['success']
+        },
+        'Afreen - High Flyers': {
+            'gid': '2077016974',
+            'color': IRONLADY_COLORS['warning']
+        },
+        'Soumya - Goal Getters': {
+            'gid': '1686874932',
+            'color': IRONLADY_COLORS['info']
+        }
+    }
+    
+    # Create tabs for each team
+    tab_names = list(teams.keys())
+    tabs = st.tabs(tab_names)
+    
+    for tab, team_name in zip(tabs, tab_names):
+        with tab:
+            gid = teams[team_name]['gid']
+            embed_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit?gid={gid}&rm=minimal&single=true&widget=false"
+            full_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit?gid={gid}"
+            
+            st.markdown(f"### {team_name}")
+            
+            # Embed sheet
+            st.markdown(
+                f'''
+                <iframe 
+                    src="{embed_url}" 
+                    width="100%" 
+                    height="700" 
+                    frameborder="0"
+                    style="border: 2px solid {teams[team_name]['color']}; border-radius: 10px;"
+                ></iframe>
+                ''',
+                unsafe_allow_html=True
             )
-            fig3 = px.bar(activity_df, x='Team Leader', y='Count', color='Activity',
-                         title="Activity Breakdown by Team Leader",
+            
+            # Link to open in new tab
+            st.markdown(f"[🔗 Open in New Tab]({full_url})")
                          barmode='group')
             st.plotly_chart(fig3, use_container_width=True)
         
@@ -1570,6 +1348,22 @@ def show_daily_checklist():
     """Show daily checklist"""
     
     st.markdown("# ✅ DAILY CHECKLIST")
+    
+    # Important warning about saving
+    st.warning("⚠️ **IMPORTANT:** Checklist progress resets on page refresh! Click '💾 Save Progress' button below to download your progress, then upload it when you return.")
+    
+    # Upload saved checklist - PROMINENT POSITION AT TOP
+    with st.expander("📤 RESTORE SAVED PROGRESS", expanded=False):
+        uploaded_checklist = st.file_uploader("Upload your saved checklist JSON file", type=['json'], key="checklist_upload")
+        if uploaded_checklist:
+            try:
+                saved_data = json.load(uploaded_checklist)
+                st.session_state.checklist_state = saved_data
+                st.success("✅ Checklist progress restored!")
+                st.rerun()
+            except:
+                st.error("❌ Invalid checklist file")
+    
     st.markdown("---")
     
     user = st.session_state.current_user
@@ -1678,19 +1472,6 @@ def show_daily_checklist():
             mime="application/json",
             use_container_width=True
         )
-    
-    # Upload saved checklist
-    st.markdown("---")
-    st.markdown("### 📤 Restore Saved Progress")
-    uploaded_checklist = st.file_uploader("Upload saved checklist JSON", type=['json'], key="checklist_upload")
-    if uploaded_checklist:
-        try:
-            saved_data = json.load(uploaded_checklist)
-            st.session_state.checklist_state = saved_data
-            st.success("✅ Checklist progress restored!")
-            st.rerun()
-        except:
-            st.error("❌ Invalid checklist file")
 
 # ============================================
 # MAIN APP

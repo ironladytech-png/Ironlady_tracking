@@ -794,7 +794,7 @@ def show_team_performance():
             )
             
             # Link to open in new tab
-            st.markdown(f"[🔗 Open in New Tab]({full_url})")barmode='group')
+            st.markdown(f"[🔗 Open in New Tab]({full_url})")barmode='group'
             st.plotly_chart(fig3, use_container_width=True)
         
         with col2:
@@ -1514,4 +1514,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

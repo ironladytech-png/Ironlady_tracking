@@ -57,6 +57,135 @@ IRONLADY_COLORS = {
 }
 
 # ============================================
+# CHECKLIST & UPLOAD DATA
+# ============================================
+
+def get_checklist_status():
+    """
+    Get checklist completion status for each team leader
+    Returns dict: {username: {'day_type': 'Day 1-1', 'completed': 15, 'total': 20, 'percentage': 75}}
+    """
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+        
+        credentials_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS", "").strip()
+        sheet_id = os.getenv('GOOGLE_SHEET_ID', '').strip()
+        
+        if not credentials_json or not sheet_id:
+            return {}
+        
+        credentials_dict = json.loads(credentials_json)
+        credentials = Credentials.from_service_account_info(
+            credentials_dict,
+            scopes=[
+                'https://www.googleapis.com/auth/spreadsheets.readonly',
+                'https://www.googleapis.com/auth/drive.readonly'
+            ]
+        )
+        
+        client = gspread.authorize(credentials)
+        spreadsheet = client.open_by_key(sheet_id)
+        
+        # Try to find a "Checklists" worksheet
+        try:
+            worksheet = spreadsheet.worksheet("Checklists")
+            data = worksheet.get_all_records()
+            
+            if not data:
+                return {}
+            
+            df = pd.DataFrame(data)
+            
+            # Aggregate by username
+            checklist_status = {}
+            
+            for username in df['Username'].unique():
+                user_data = df[df['Username'] == username]
+                total_tasks = len(user_data)
+                completed_tasks = len(user_data[user_data['Completed'] == True])
+                day_type = user_data['Day_Type'].iloc[0] if len(user_data) > 0 else 'Unknown'
+                
+                checklist_status[username] = {
+                    'day_type': day_type,
+                    'completed': completed_tasks,
+                    'total': total_tasks,
+                    'percentage': round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
+                }
+            
+            return checklist_status
+        
+        except:
+            # No Checklists worksheet found
+            return {}
+    
+    except Exception as e:
+        print(f"⚠️ Could not fetch checklist data: {e}")
+        return {}
+
+def get_upload_status():
+    """
+    Get document upload status for each team leader
+    Returns dict: {username: {'total_files': 5, 'categories': ['WA Audit', 'Call Recording'], 'latest': '2024-11-07'}}
+    """
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+        
+        credentials_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS", "").strip()
+        sheet_id = os.getenv('GOOGLE_SHEET_ID', '').strip()
+        
+        if not credentials_json or not sheet_id:
+            return {}
+        
+        credentials_dict = json.loads(credentials_json)
+        credentials = Credentials.from_service_account_info(
+            credentials_dict,
+            scopes=[
+                'https://www.googleapis.com/auth/spreadsheets.readonly',
+                'https://www.googleapis.com/auth/drive.readonly'
+            ]
+        )
+        
+        client = gspread.authorize(credentials)
+        spreadsheet = client.open_by_key(sheet_id)
+        
+        # Try to find an "Uploads" worksheet
+        try:
+            worksheet = spreadsheet.worksheet("Uploads")
+            data = worksheet.get_all_records()
+            
+            if not data:
+                return {}
+            
+            df = pd.DataFrame(data)
+            
+            # Aggregate by username
+            upload_status = {}
+            
+            for username in df['Username'].unique():
+                user_data = df[df['Username'] == username]
+                total_files = len(user_data)
+                categories = user_data['Category'].unique().tolist()
+                latest = user_data['Upload_Time'].max() if 'Upload_Time' in user_data.columns else 'Unknown'
+                
+                upload_status[username] = {
+                    'total_files': total_files,
+                    'categories': categories,
+                    'latest': latest
+                }
+            
+            return upload_status
+        
+        except:
+            # No Uploads worksheet found
+            return {}
+    
+    except Exception as e:
+        print(f"⚠️ Could not fetch upload data: {e}")
+        return {}
+
+# ============================================
 # GOOGLE SHEETS CONNECTION - FIXED FOR YOUR STRUCTURE
 # ============================================
 
@@ -255,8 +384,8 @@ def get_data_from_sheets():
 # EMAIL FUNCTIONS
 # ============================================
 
-def create_email_html(df):
-    """Create HTML email with Iron Lady branding"""
+def create_email_html(df, checklist_status={}, upload_status={}):
+    """Create HTML email with Iron Lady branding including checklist and upload status"""
     
     # Calculate totals
     total_rms = int(df['Total_RMs'].sum())
@@ -284,6 +413,132 @@ def create_email_html(df):
         </tr>
         """
     
+    # Create checklist status section
+    checklist_html = ""
+    if checklist_status:
+        checklist_html = f"""
+                <h2 class="section-title">✅ Daily Checklist Status</h2>
+                <div style="background: white; padding: 20px; border-left: 5px solid {IRONLADY_COLORS['primary']}; margin: 20px 0;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr>
+                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: left;">Team Leader</th>
+                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: center;">Day Type</th>
+                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: center;">Completed</th>
+                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: center;">Progress</th>
+                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: center;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        """
+        
+        # Map usernames to team leader names
+        username_map = {
+            'ghazala': 'Ghazala - Rising Stars',
+            'megha': 'Megha - Winners',
+            'afreen': 'Afreen - High Flyers',
+            'soumya': 'Soumya - Goal Getters'
+        }
+        
+        for username, status in checklist_status.items():
+            team_name = username_map.get(username, username.capitalize())
+            percentage = status['percentage']
+            status_icon = '✅' if percentage == 100 else '⚠️' if percentage >= 50 else '❌'
+            status_text = 'Complete' if percentage == 100 else 'In Progress' if percentage > 0 else 'Not Started'
+            status_color = IRONLADY_COLORS['success'] if percentage == 100 else IRONLADY_COLORS['primary'] if percentage >= 50 else '#dc3545'
+            
+            checklist_html += f"""
+                            <tr>
+                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">{team_name}</td>
+                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;">{status['day_type']}</td>
+                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;">{status['completed']}/{status['total']}</td>
+                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;">
+                                    <div style="background: #e0e0e0; height: 20px; border-radius: 10px; overflow: hidden;">
+                                        <div style="background: {status_color}; height: 100%; width: {percentage}%;"></div>
+                                    </div>
+                                </td>
+                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;">
+                                    {status_icon} <span style="color: {status_color}; font-weight: 700;">{status_text}</span>
+                                </td>
+                            </tr>
+            """
+        
+        checklist_html += """
+                        </tbody>
+                    </table>
+                </div>
+        """
+    else:
+        checklist_html = f"""
+                <h2 class="section-title">✅ Daily Checklist Status</h2>
+                <div style="background: {IRONLADY_COLORS['accent']}; padding: 20px; border-left: 5px solid {IRONLADY_COLORS['primary']}; margin: 20px 0;">
+                    <p style="margin: 0;">ℹ️ No checklist data available. Team leaders should complete their daily checklists in the app.</p>
+                </div>
+        """
+    
+    # Create upload status section
+    upload_html = ""
+    if upload_status:
+        upload_html = f"""
+                <h2 class="section-title">📤 Document Upload Status</h2>
+                <div style="background: white; padding: 20px; border-left: 5px solid {IRONLADY_COLORS['primary']}; margin: 20px 0;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr>
+                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: left;">Team Leader</th>
+                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: center;">Total Files</th>
+                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: left;">Categories</th>
+                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: center;">Latest Upload</th>
+                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: center;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        """
+        
+        # Map usernames to team leader names
+        username_map = {
+            'ghazala': 'Ghazala - Rising Stars',
+            'megha': 'Megha - Winners',
+            'afreen': 'Afreen - High Flyers',
+            'soumya': 'Soumya - Goal Getters'
+        }
+        
+        for username, status in upload_status.items():
+            team_name = username_map.get(username, username.capitalize())
+            total_files = status['total_files']
+            categories = ', '.join(status['categories'][:3])  # Show first 3 categories
+            if len(status['categories']) > 3:
+                categories += f" (+{len(status['categories']) - 3} more)"
+            latest = status['latest']
+            status_icon = '✅' if total_files > 0 else '❌'
+            status_text = f'{total_files} uploaded' if total_files > 0 else 'No uploads'
+            status_color = IRONLADY_COLORS['success'] if total_files > 0 else '#dc3545'
+            
+            upload_html += f"""
+                            <tr>
+                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">{team_name}</td>
+                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center; font-weight: 700;">{total_files}</td>
+                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;"><small>{categories}</small></td>
+                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;"><small>{latest}</small></td>
+                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;">
+                                    {status_icon} <span style="color: {status_color}; font-weight: 700;">{status_text}</span>
+                                </td>
+                            </tr>
+            """
+        
+        upload_html += """
+                        </tbody>
+                    </table>
+                </div>
+        """
+    else:
+        upload_html = f"""
+                <h2 class="section-title">📤 Document Upload Status</h2>
+                <div style="background: {IRONLADY_COLORS['accent']}; padding: 20px; border-left: 5px solid {IRONLADY_COLORS['primary']}; margin: 20px 0;">
+                    <p style="margin: 0;">ℹ️ No upload data available. Team leaders should upload required documents in the app.</p>
+                </div>
+        """
+    
     # Create HTML
     html = f"""
     <html>
@@ -296,7 +551,7 @@ def create_email_html(df):
                 padding: 0;
             }}
             .container {{
-                max-width: 800px;
+                max-width: 900px;
                 margin: 20px auto;
                 background: white;
                 border-radius: 10px;
@@ -412,6 +667,10 @@ def create_email_html(df):
                         {table_rows}
                     </tbody>
                 </table>
+                
+                {checklist_html}
+                
+                {upload_html}
                 
                 <h2 class="section-title">💡 Key Insights</h2>
                 <div class="metric">
@@ -533,6 +792,32 @@ def main():
     print(f"✅ Data ready: {len(df)} team leaders")
     print(f"📋 Team Leaders: {', '.join(df['Team_Leader'].tolist())}")
     
+    # Get checklist status
+    print("\n" + "="*60)
+    print("✅ FETCHING CHECKLIST STATUS")
+    print("="*60)
+    
+    checklist_status = get_checklist_status()
+    if checklist_status:
+        print(f"✅ Checklist data loaded for {len(checklist_status)} team leaders")
+        for username, status in checklist_status.items():
+            print(f"   → {username}: {status['completed']}/{status['total']} tasks ({status['percentage']}%)")
+    else:
+        print("ℹ️  No checklist data found (this is optional)")
+    
+    # Get upload status
+    print("\n" + "="*60)
+    print("📤 FETCHING UPLOAD STATUS")
+    print("="*60)
+    
+    upload_status = get_upload_status()
+    if upload_status:
+        print(f"✅ Upload data loaded for {len(upload_status)} team leaders")
+        for username, status in upload_status.items():
+            print(f"   → {username}: {status['total_files']} files uploaded")
+    else:
+        print("ℹ️  No upload data found (this is optional)")
+    
     # Create email
     print("\n" + "="*60)
     print("📝 CREATING EMAIL")
@@ -540,8 +825,12 @@ def main():
     
     subject = f"Iron Lady Daily Report - {datetime.now().strftime('%B %d, %Y')}"
     
-    html_body = create_email_html(df)
+    html_body = create_email_html(df, checklist_status, upload_status)
     print("✅ Email HTML created with all data from Google Sheets")
+    if checklist_status:
+        print("   ✓ Includes checklist completion status")
+    if upload_status:
+        print("   ✓ Includes document upload status")
     
     # Send email
     print("\n" + "="*60)

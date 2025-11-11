@@ -1,7 +1,7 @@
 """
-IRON LADY - Email Automation Script for GitHub Actions
-FIXED: Reads your actual Google Sheets structure with multiple tabs
-Uses your existing secret names: GMAIL_USER, GMAIL_APP_PASSWORD, CEO_EMAIL, AUTO_MAIL
+IRON LADY - Email Script for Google Sheets
+Properly reads structured data from Google Sheets
+Works with ironlady_sheets_complete.py
 """
 
 import pandas as pd
@@ -12,43 +12,38 @@ from datetime import datetime
 import os
 import sys
 import json
-import re
+import gspread
+from google.oauth2.service_account import Credentials
 
 # ============================================
-# CONFIGURATION - USING YOUR SECRET NAMES
+# CONFIGURATION
 # ============================================
 
-# Email configuration - using YOUR existing secret names
+# Email config
 EMAIL_SENDER = os.getenv('GMAIL_USER', '').strip()
 EMAIL_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', '').strip()
-EMAIL_SMTP_SERVER = 'smtp.gmail.com'  # Fixed for Gmail
-EMAIL_SMTP_PORT = 587  # Fixed for Gmail
+EMAIL_SMTP_SERVER = 'smtp.gmail.com'
+EMAIL_SMTP_PORT = 587
 
-# Recipients - using YOUR secret names
+# Recipients
 CEO_EMAIL = os.getenv('CEO_EMAIL', '').strip()
 AUTO_MAIL = os.getenv('AUTO_MAIL', '').strip()
 
-# Clean and combine all recipient emails (handle newlines, commas, spaces)
+# Clean recipients
 recipient_list = []
+for email_var in [CEO_EMAIL, AUTO_MAIL]:
+    if email_var:
+        cleaned = email_var.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
+        emails = [e.strip() for e in cleaned.replace(',', ' ').split() if e.strip() and '@' in e]
+        recipient_list.extend(emails)
 
-if CEO_EMAIL:
-    # Replace newlines and multiple spaces with single space
-    cleaned = CEO_EMAIL.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
-    # Split by comma and/or whitespace
-    emails = [email.strip() for email in cleaned.replace(',', ' ').split() if email.strip() and '@' in email]
-    recipient_list.extend(emails)
+RECIPIENT_EMAILS = list(set([e for e in recipient_list if e and '@' in e and '.' in e]))
 
-if AUTO_MAIL:
-    # Replace newlines and multiple spaces with single space
-    cleaned = AUTO_MAIL.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
-    # Split by comma and/or whitespace
-    emails = [email.strip() for email in cleaned.replace(',', ' ').split() if email.strip() and '@' in email]
-    recipient_list.extend(emails)
+# Google Sheets config
+SHEET_ID = os.getenv('GOOGLE_SHEET_ID', '').strip()
+CREDENTIALS_JSON = os.getenv('GOOGLE_SHEETS_CREDENTIALS', '').strip()
 
-# Remove duplicates and invalid emails
-RECIPIENT_EMAILS = list(set([email for email in recipient_list if email and '@' in email and '.' in email]))
-
-# Iron Lady Colors
+# Colors
 IRONLADY_COLORS = {
     'primary': '#E63946',
     'secondary': '#1A1A1A',
@@ -56,26 +51,26 @@ IRONLADY_COLORS = {
     'success': '#2A9D8F',
 }
 
+# User mapping
+USERNAME_TO_NAME = {
+    'ghazala': 'Ghazala - Rising Stars',
+    'megha': 'Megha - Winners',
+    'afreen': 'Afreen - High Flyers',
+    'soumya': 'Soumya - Goal Getters'
+}
+
 # ============================================
-# CHECKLIST & UPLOAD DATA
+# GOOGLE SHEETS FUNCTIONS
 # ============================================
 
-def get_checklist_status():
-    """
-    Get checklist completion status for each team leader
-    Returns dict: {username: {'day_type': 'Day 1-1', 'completed': 15, 'total': 20, 'percentage': 75}}
-    """
+def get_sheets_client():
+    """Get authenticated Google Sheets client"""
+    if not CREDENTIALS_JSON or not SHEET_ID:
+        print("❌ Missing GOOGLE_SHEETS_CREDENTIALS or GOOGLE_SHEET_ID")
+        return None
+    
     try:
-        import gspread
-        from google.oauth2.service_account import Credentials
-        
-        credentials_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS", "").strip()
-        sheet_id = os.getenv('GOOGLE_SHEET_ID', '').strip()
-        
-        if not credentials_json or not sheet_id:
-            return {}
-        
-        credentials_dict = json.loads(credentials_json)
+        credentials_dict = json.loads(CREDENTIALS_JSON)
         credentials = Credentials.from_service_account_info(
             credentials_dict,
             scopes=[
@@ -85,307 +80,175 @@ def get_checklist_status():
         )
         
         client = gspread.authorize(credentials)
-        spreadsheet = client.open_by_key(sheet_id)
-        
-        # Try to find a "Checklists" worksheet
-        try:
-            worksheet = spreadsheet.worksheet("Checklists")
-            data = worksheet.get_all_records()
-            
-            if not data:
-                return {}
-            
-            df = pd.DataFrame(data)
-            
-            # Aggregate by username
-            checklist_status = {}
-            
-            for username in df['Username'].unique():
-                user_data = df[df['Username'] == username]
-                total_tasks = len(user_data)
-                completed_tasks = len(user_data[user_data['Completed'] == True])
-                day_type = user_data['Day_Type'].iloc[0] if len(user_data) > 0 else 'Unknown'
-                
-                checklist_status[username] = {
-                    'day_type': day_type,
-                    'completed': completed_tasks,
-                    'total': total_tasks,
-                    'percentage': round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
-                }
-            
-            return checklist_status
-        
-        except:
-            # No Checklists worksheet found
-            return {}
-    
+        return client
     except Exception as e:
-        print(f"⚠️ Could not fetch checklist data: {e}")
-        return {}
+        print(f"❌ Error creating client: {e}")
+        return None
 
-def get_upload_status():
-    """
-    Get document upload status for each team leader
-    Returns dict: {username: {'total_files': 5, 'categories': ['WA Audit', 'Call Recording'], 'latest': '2024-11-07'}}
-    """
+def get_metrics_data(date_str):
+    """Get performance metrics from Metrics sheet"""
     try:
-        import gspread
-        from google.oauth2.service_account import Credentials
+        client = get_sheets_client()
+        if not client:
+            return pd.DataFrame()
         
-        credentials_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS", "").strip()
-        sheet_id = os.getenv('GOOGLE_SHEET_ID', '').strip()
-        
-        if not credentials_json or not sheet_id:
-            return {}
-        
-        credentials_dict = json.loads(credentials_json)
-        credentials = Credentials.from_service_account_info(
-            credentials_dict,
-            scopes=[
-                'https://www.googleapis.com/auth/spreadsheets.readonly',
-                'https://www.googleapis.com/auth/drive.readonly'
-            ]
-        )
-        
-        client = gspread.authorize(credentials)
-        spreadsheet = client.open_by_key(sheet_id)
-        
-        # Try to find an "Uploads" worksheet
-        try:
-            worksheet = spreadsheet.worksheet("Uploads")
-            data = worksheet.get_all_records()
-            
-            if not data:
-                return {}
-            
-            df = pd.DataFrame(data)
-            
-            # Aggregate by username
-            upload_status = {}
-            
-            for username in df['Username'].unique():
-                user_data = df[df['Username'] == username]
-                total_files = len(user_data)
-                categories = user_data['Category'].unique().tolist()
-                latest = user_data['Upload_Time'].max() if 'Upload_Time' in user_data.columns else 'Unknown'
-                
-                upload_status[username] = {
-                    'total_files': total_files,
-                    'categories': categories,
-                    'latest': latest
-                }
-            
-            return upload_status
-        
-        except:
-            # No Uploads worksheet found
-            return {}
-    
-    except Exception as e:
-        print(f"⚠️ Could not fetch upload data: {e}")
-        return {}
-
-# ============================================
-# GOOGLE SHEETS CONNECTION - FIXED FOR YOUR STRUCTURE
-# ============================================
-
-def parse_team_sheet(worksheet):
-    """Parse a team leader's worksheet with your actual structure"""
-    try:
+        spreadsheet = client.open_by_key(SHEET_ID)
+        worksheet = spreadsheet.worksheet('Metrics')
         all_data = worksheet.get_all_values()
         
-        # Find the team leader name from the sheet
-        team_name = None
-        for row in all_data[:10]:
-            if len(row) > 1 and row[1] and ('-' in row[1] or 'Rising' in row[1] or 'Winners' in row[1] or 'Flyers' in row[1] or 'Getters' in row[1]):
-                team_name = row[1]
-                break
+        if len(all_data) <= 1:
+            return pd.DataFrame()
         
-        # Initialize aggregates
-        total_wa_audit = 0
-        total_call_audit = 0
-        total_mocks = 0
-        total_sl_calls = 0
-        total_registrations = 0
-        total_pitches = 0
-        total_current_mc = 0
-        rm_count = 0
+        # Create DataFrame
+        df = pd.DataFrame(all_data[1:], columns=all_data[0])
         
-        # Parse each row looking for achieved values
-        for row in all_data:
-            if len(row) < 15:
-                continue
-            
-            # Check if this is a data row (has RM name and numbers)
-            rm_name = row[1] if len(row) > 1 else ''
-            
-            # Skip header rows and team name rows
-            if not rm_name or 'RM Name' in rm_name or 'Target' in rm_name or 'Achieved' in rm_name:
-                continue
-            if team_name and team_name in rm_name:
-                continue
-            
-            # Try to extract achieved values from various columns
-            try:
-                # WA Audit Achieved (column D, index 3)
-                if len(row) > 3 and row[3] and row[3].strip() and row[3].strip().replace('-', '').isdigit():
-                    total_wa_audit += abs(int(row[3]))
-                
-                # Call Audit Achieved (column F, index 5)
-                if len(row) > 5 and row[5] and row[5].strip() and row[5].strip().replace('-', '').isdigit():
-                    total_call_audit += abs(int(row[5]))
-                
-                # Mocks Achieved (column H, index 7)
-                if len(row) > 7 and row[7] and row[7].strip() and row[7].strip().replace('-', '').isdigit():
-                    total_mocks += abs(int(row[7]))
-                
-                # SL Calls Achieved (column J, index 9)
-                if len(row) > 9 and row[9] and row[9].strip() and row[9].strip().replace('-', '').isdigit():
-                    total_sl_calls += abs(int(row[9]))
-                
-                # Follow ups Registrations Achieved (column L, index 11)
-                if len(row) > 11 and row[11] and row[11].strip():
-                    val = row[11].strip()
-                    # Extract number even if it has text (like "1-Shwetha")
-                    num = re.findall(r'\d+', val)
-                    if num:
-                        total_registrations += int(num[0])
-                
-                # Pitches Achieved (column N, index 13)
-                if len(row) > 13 and row[13] and row[13].strip() and row[13].strip().replace('-', '').isdigit():
-                    total_pitches += abs(int(row[13]))
-                
-                # Current MC Registrations Achieved (column P, index 15)
-                if len(row) > 15 and row[15] and row[15].strip() and row[15].strip().replace('-', '').isdigit():
-                    total_current_mc += abs(int(row[15]))
-                
-                # Count this RM if they have any data
-                if any([row[3], row[5], row[7], row[9], row[11], row[13], row[15]]):
-                    rm_count += 1
-            except:
-                continue
+        # Filter for date
+        df = df[df['Date'] == date_str].copy()
+        
+        if len(df) == 0:
+            return pd.DataFrame()
+        
+        # Convert numeric columns
+        numeric_cols = ['WA_Audit_Achieved', 'Call_Audit_Achieved', 'Mocks_Achieved', 
+                       'SL_Calls_Achieved', 'Followups_Achieved', 'Pitches_Achieved', 'Current_MC_Achieved']
+        
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+        
+        # Aggregate by username
+        agg_dict = {
+            'RM_Name': 'count',  # Count RMs
+            'WA_Audit_Achieved': 'sum',
+            'Call_Audit_Achieved': 'sum',
+            'Mocks_Achieved': 'sum',
+            'SL_Calls_Achieved': 'sum',
+            'Followups_Achieved': 'sum',
+            'Pitches_Achieved': 'sum',
+            'Current_MC_Achieved': 'sum'
+        }
+        
+        grouped = df.groupby('Username').agg(agg_dict).reset_index()
+        
+        # Rename columns
+        grouped.columns = ['Username', 'Total_RMs', 'Total_WA_Audit', 'Total_Call_Audit',
+                          'Total_Mocks', 'Total_SL_Calls', 'Total_Registrations', 
+                          'Total_Pitches', 'Total_Current_MC']
+        
+        # Add team leader names
+        grouped['Team_Leader'] = grouped['Username'].map(USERNAME_TO_NAME)
         
         # Calculate conversion rate
-        conversion_rate = round((total_registrations / total_pitches * 100), 1) if total_pitches > 0 else 0.0
-        
-        return {
-            'Team_Leader': team_name if team_name else 'Unknown',
-            'Total_RMs': rm_count,
-            'Total_WA_Audit': total_wa_audit,
-            'Total_Call_Audit': total_call_audit,
-            'Total_Mocks': total_mocks,
-            'Total_SL_Calls': total_sl_calls,
-            'Total_Pitches': total_pitches,
-            'Total_Registrations': total_registrations,
-            'Total_Current_MC': total_current_mc,
-            'Conversion_Rate': conversion_rate
-        }
-    
-    except Exception as e:
-        print(f"⚠️ Error parsing sheet: {e}")
-        return None
-
-def get_data_from_sheets():
-    """
-    Fetch data from YOUR actual Google Sheets structure
-    Reads all team sheets (Ghazala, Megha, Afreen, Soumya)
-    """
-    try:
-        import gspread
-        from google.oauth2.service_account import Credentials
-        
-        # Get credentials from environment
-        credentials_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS", "").strip()
-        sheet_id = os.getenv('GOOGLE_SHEET_ID', '').strip()
-        
-        if not credentials_json:
-            print("⚠️ GOOGLE_SHEETS_CREDENTIALS not set")
-            return None
-        
-        if not sheet_id:
-            print("⚠️ GOOGLE_SHEET_ID not set")
-            return None
-        
-        # Parse JSON credentials
-        credentials_dict = json.loads(credentials_json)
-        
-        credentials = Credentials.from_service_account_info(
-            credentials_dict,
-            scopes=[
-                'https://www.googleapis.com/auth/spreadsheets.readonly',
-                'https://www.googleapis.com/auth/drive.readonly'
-            ]
+        grouped['Conversion_Rate'] = grouped.apply(
+            lambda row: round((row['Total_Registrations'] / row['Total_Pitches'] * 100), 1)
+            if row['Total_Pitches'] > 0 else 0.0,
+            axis=1
         )
         
-        client = gspread.authorize(credentials)
+        return grouped
         
-        print(f"📊 Connecting to Google Sheet: {sheet_id}")
-        spreadsheet = client.open_by_key(sheet_id)
-        
-        # Get all worksheets
-        worksheets = spreadsheet.worksheets()
-        print(f"📋 Found {len(worksheets)} worksheets")
-        
-        # Map worksheet names to team leaders
-        sheet_mapping = {
-            'Ghazala': 'ghazala',
-            'Megha': 'megha',
-            'Afreen': 'afreen',
-            'Soumya': 'soumya'
-        }
-        
-        team_data = []
-        
-        # Parse each team leader's sheet
-        for worksheet in worksheets:
-            sheet_title = worksheet.title
-            print(f"   Checking sheet: {sheet_title}")
-            
-            # Find matching team leader
-            matched = False
-            for sheet_name in sheet_mapping.keys():
-                if sheet_name.lower() in sheet_title.lower():
-                    print(f"      ✓ Matched as {sheet_name}")
-                    
-                    # Parse the sheet
-                    data = parse_team_sheet(worksheet)
-                    
-                    if data and data['Total_Pitches'] > 0:
-                        team_data.append(data)
-                        print(f"      ✓ Loaded data: {data['Total_Pitches']} pitches, {data['Total_Registrations']} registrations")
-                    else:
-                        print(f"      ⚠️ No data found in sheet")
-                    
-                    matched = True
-                    break
-            
-            if not matched:
-                print(f"      - Skipped (not a team leader sheet)")
-        
-        if not team_data:
-            print("⚠️ No team data found in any sheets")
-            return None
-        
-        print(f"✅ Loaded data from {len(team_data)} team sheets")
-        df = pd.DataFrame(team_data)
-        
-        return df
-    
-    except json.JSONDecodeError as e:
-        print(f"❌ Invalid GOOGLE_SHEETS_CREDENTIALS JSON: {e}")
-        return None
     except Exception as e:
-        print(f"❌ Error fetching from Google Sheets: {e}")
+        print(f"❌ Error getting metrics: {e}")
         import traceback
         traceback.print_exc()
-        return None
+        return pd.DataFrame()
+
+def get_checklist_status(date_str):
+    """Get checklist status from Checklists sheet"""
+    try:
+        client = get_sheets_client()
+        if not client:
+            return {}
+        
+        spreadsheet = client.open_by_key(SHEET_ID)
+        worksheet = spreadsheet.worksheet('Checklists')
+        all_data = worksheet.get_all_values()
+        
+        if len(all_data) <= 1:
+            return {}
+        
+        # Create DataFrame
+        df = pd.DataFrame(all_data[1:], columns=all_data[0])
+        
+        # Filter for date
+        df = df[df['Date'] == date_str].copy()
+        
+        if len(df) == 0:
+            return {}
+        
+        # Aggregate by username
+        checklist_status = {}
+        
+        for username in df['Username'].unique():
+            user_data = df[df['Username'] == username]
+            total_tasks = len(user_data)
+            completed_tasks = len(user_data[user_data['Completed'].str.upper() == 'TRUE'])
+            day_type = user_data['Day_Type'].iloc[0] if len(user_data) > 0 else 'Unknown'
+            percentage = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
+            
+            checklist_status[username] = {
+                'day_type': day_type,
+                'completed': completed_tasks,
+                'total': total_tasks,
+                'percentage': percentage
+            }
+        
+        return checklist_status
+        
+    except Exception as e:
+        print(f"⚠️  Could not get checklist status: {e}")
+        return {}
+
+def get_upload_status(date_str):
+    """Get upload status from Uploads sheet"""
+    try:
+        client = get_sheets_client()
+        if not client:
+            return {}
+        
+        spreadsheet = client.open_by_key(SHEET_ID)
+        worksheet = spreadsheet.worksheet('Uploads')
+        all_data = worksheet.get_all_values()
+        
+        if len(all_data) <= 1:
+            return {}
+        
+        # Create DataFrame
+        df = pd.DataFrame(all_data[1:], columns=all_data[0])
+        
+        # Filter for date
+        df = df[df['Date'] == date_str].copy()
+        
+        if len(df) == 0:
+            return {}
+        
+        # Aggregate by username
+        upload_status = {}
+        
+        for username in df['Username'].unique():
+            user_data = df[df['Username'] == username]
+            total_files = len(user_data)
+            categories = user_data['Category'].unique().tolist()
+            latest = user_data['Upload_Time'].max() if len(user_data) > 0 else 'Unknown'
+            
+            upload_status[username] = {
+                'total_files': total_files,
+                'categories': categories,
+                'latest': latest
+            }
+        
+        return upload_status
+        
+    except Exception as e:
+        print(f"⚠️  Could not get upload status: {e}")
+        return {}
 
 # ============================================
 # EMAIL FUNCTIONS
 # ============================================
 
 def create_email_html(df, checklist_status={}, upload_status={}):
-    """Create HTML email with Iron Lady branding including checklist and upload status"""
+    """Create HTML email"""
     
     # Calculate totals
     total_rms = int(df['Total_RMs'].sum())
@@ -393,238 +256,183 @@ def create_email_html(df, checklist_status={}, upload_status={}):
     total_registrations = int(df['Total_Registrations'].sum())
     avg_conversion = round((total_registrations / total_pitches * 100), 1) if total_pitches > 0 else 0
     
-    total_wa_audit = int(df['Total_WA_Audit'].sum()) if 'Total_WA_Audit' in df.columns else 0
-    total_call_audit = int(df['Total_Call_Audit'].sum()) if 'Total_Call_Audit' in df.columns else 0
-    total_mocks = int(df['Total_Mocks'].sum()) if 'Total_Mocks' in df.columns else 0
-    total_sl_calls = int(df['Total_SL_Calls'].sum()) if 'Total_SL_Calls' in df.columns else 0
-    total_current_mc = int(df['Total_Current_MC'].sum()) if 'Total_Current_MC' in df.columns else 0
+    total_wa = int(df['Total_WA_Audit'].sum())
+    total_call = int(df['Total_Call_Audit'].sum())
+    total_mocks = int(df['Total_Mocks'].sum())
+    total_sl = int(df['Total_SL_Calls'].sum())
+    total_mc = int(df['Total_Current_MC'].sum())
     
-    # Create table rows for team performance
+    # Team performance table
     table_rows = ""
     for _, row in df.iterrows():
-        conversion = row.get('Conversion_Rate', 0)
+        conv = row['Conversion_Rate']
+        if conv >= 15:
+            conv_color = IRONLADY_COLORS['success']
+            conv_icon = '✅'
+        elif conv >= 10:
+            conv_color = IRONLADY_COLORS['primary']
+            conv_icon = '⚠️'
+        else:
+            conv_color = '#dc3545'
+            conv_icon = '❌'
+        
         table_rows += f"""
         <tr>
-            <td style="padding: 12px 15px; border-bottom: 1px solid #e0e0e0;">{row['Team_Leader']}</td>
-            <td style="padding: 12px 15px; border-bottom: 1px solid #e0e0e0; text-align: center;">{row['Total_RMs']}</td>
-            <td style="padding: 12px 15px; border-bottom: 1px solid #e0e0e0; text-align: center;">{row['Total_Pitches']}</td>
-            <td style="padding: 12px 15px; border-bottom: 1px solid #e0e0e0; text-align: center;">{row['Total_Registrations']}</td>
-            <td style="padding: 12px 15px; border-bottom: 1px solid #e0e0e0; text-align: center; font-weight: 700;">{conversion}%</td>
+            <td style="padding: 12px;">{row['Team_Leader']}</td>
+            <td style="padding: 12px; text-align: center;">{row['Total_RMs']}</td>
+            <td style="padding: 12px; text-align: center;">{row['Total_Pitches']}</td>
+            <td style="padding: 12px; text-align: center;">{row['Total_Registrations']}</td>
+            <td style="padding: 12px; text-align: center;">
+                {conv_icon} <span style="color: {conv_color}; font-weight: 700;">{conv}%</span>
+            </td>
         </tr>
         """
     
-    # Create checklist status section
+    # Checklist section
     checklist_html = ""
     if checklist_status:
         checklist_html = f"""
-                <h2 class="section-title">✅ Daily Checklist Status</h2>
-                <div style="background: white; padding: 20px; border-left: 5px solid {IRONLADY_COLORS['primary']}; margin: 20px 0;">
-                    <table style="width: 100%; border-collapse: collapse;">
-                        <thead>
-                            <tr>
-                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: left;">Team Leader</th>
-                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: center;">Day Type</th>
-                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: center;">Completed</th>
-                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: center;">Progress</th>
-                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: center;">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+        <h2 class="section-title">✅ Daily Checklist Status</h2>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr style="background: {IRONLADY_COLORS['secondary']}; color: white;">
+                <th style="padding: 12px; text-align: left;">Team Leader</th>
+                <th style="padding: 12px; text-align: center;">Day Type</th>
+                <th style="padding: 12px; text-align: center;">Completed</th>
+                <th style="padding: 12px; text-align: center;">Progress</th>
+                <th style="padding: 12px; text-align: center;">Status</th>
+            </tr>
         """
         
-        # Map usernames to team leader names
-        username_map = {
-            'ghazala': 'Ghazala - Rising Stars',
-            'megha': 'Megha - Winners',
-            'afreen': 'Afreen - High Flyers',
-            'soumya': 'Soumya - Goal Getters'
-        }
-        
-        for username, status in checklist_status.items():
-            team_name = username_map.get(username, username.capitalize())
-            percentage = status['percentage']
-            status_icon = '✅' if percentage == 100 else '⚠️' if percentage >= 50 else '❌'
-            status_text = 'Complete' if percentage == 100 else 'In Progress' if percentage > 0 else 'Not Started'
-            status_color = IRONLADY_COLORS['success'] if percentage == 100 else IRONLADY_COLORS['primary'] if percentage >= 50 else '#dc3545'
+        for _, row in df.iterrows():
+            username = row['Username']
+            team_name = row['Team_Leader']
             
-            checklist_html += f"""
-                            <tr>
-                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">{team_name}</td>
-                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;">{status['day_type']}</td>
-                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;">{status['completed']}/{status['total']}</td>
-                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;">
-                                    <div style="background: #e0e0e0; height: 20px; border-radius: 10px; overflow: hidden;">
-                                        <div style="background: {status_color}; height: 100%; width: {percentage}%;"></div>
-                                    </div>
-                                </td>
-                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;">
-                                    {status_icon} <span style="color: {status_color}; font-weight: 700;">{status_text}</span>
-                                </td>
-                            </tr>
-            """
+            if username in checklist_status:
+                status = checklist_status[username]
+                percentage = status['percentage']
+                
+                if percentage == 100:
+                    status_icon = '✅'
+                    status_text = 'Complete'
+                    status_color = IRONLADY_COLORS['success']
+                elif percentage >= 50:
+                    status_icon = '⚠️'
+                    status_text = 'In Progress'
+                    status_color = IRONLADY_COLORS['primary']
+                else:
+                    status_icon = '❌'
+                    status_text = 'Not Started'
+                    status_color = '#dc3545'
+                
+                checklist_html += f"""
+                <tr>
+                    <td style="padding: 12px;">{team_name}</td>
+                    <td style="padding: 12px; text-align: center;">{status['day_type']}</td>
+                    <td style="padding: 12px; text-align: center;">{status['completed']}/{status['total']}</td>
+                    <td style="padding: 12px; text-align: center;">
+                        <div style="background: #e0e0e0; height: 20px; border-radius: 10px; overflow: hidden;">
+                            <div style="background: {status_color}; height: 100%; width: {percentage}%;"></div>
+                        </div>
+                    </td>
+                    <td style="padding: 12px; text-align: center;">
+                        {status_icon} <span style="color: {status_color}; font-weight: 700;">{status_text}</span>
+                    </td>
+                </tr>
+                """
+            else:
+                checklist_html += f"""
+                <tr>
+                    <td style="padding: 12px;">{team_name}</td>
+                    <td style="padding: 12px; text-align: center;" colspan="4">
+                        <span style="color: #999;">No data</span>
+                    </td>
+                </tr>
+                """
         
-        checklist_html += """
-                        </tbody>
-                    </table>
-                </div>
-        """
+        checklist_html += "</table>"
     else:
         checklist_html = f"""
-                <h2 class="section-title">✅ Daily Checklist Status</h2>
-                <div style="background: {IRONLADY_COLORS['accent']}; padding: 20px; border-left: 5px solid {IRONLADY_COLORS['primary']}; margin: 20px 0;">
-                    <p style="margin: 0;">ℹ️ No checklist data available. Team leaders should complete their daily checklists in the app.</p>
-                </div>
+        <h2 class="section-title">✅ Daily Checklist Status</h2>
+        <div style="background: {IRONLADY_COLORS['accent']}; padding: 20px; margin: 20px 0;">
+            <p>ℹ️ No checklist data available for today.</p>
+        </div>
         """
     
-    # Create upload status section
+    # Upload section
     upload_html = ""
     if upload_status:
         upload_html = f"""
-                <h2 class="section-title">📤 Document Upload Status</h2>
-                <div style="background: white; padding: 20px; border-left: 5px solid {IRONLADY_COLORS['primary']}; margin: 20px 0;">
-                    <table style="width: 100%; border-collapse: collapse;">
-                        <thead>
-                            <tr>
-                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: left;">Team Leader</th>
-                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: center;">Total Files</th>
-                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: left;">Categories</th>
-                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: center;">Latest Upload</th>
-                                <th style="background: {IRONLADY_COLORS['secondary']}; color: white; padding: 12px; text-align: center;">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
+        <h2 class="section-title">📤 Document Upload Status</h2>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr style="background: {IRONLADY_COLORS['secondary']}; color: white;">
+                <th style="padding: 12px; text-align: left;">Team Leader</th>
+                <th style="padding: 12px; text-align: center;">Total Files</th>
+                <th style="padding: 12px; text-align: left;">Categories</th>
+                <th style="padding: 12px; text-align: center;">Status</th>
+            </tr>
         """
         
-        # Map usernames to team leader names
-        username_map = {
-            'ghazala': 'Ghazala - Rising Stars',
-            'megha': 'Megha - Winners',
-            'afreen': 'Afreen - High Flyers',
-            'soumya': 'Soumya - Goal Getters'
-        }
-        
-        for username, status in upload_status.items():
-            team_name = username_map.get(username, username.capitalize())
-            total_files = status['total_files']
-            categories = ', '.join(status['categories'][:3])  # Show first 3 categories
-            if len(status['categories']) > 3:
-                categories += f" (+{len(status['categories']) - 3} more)"
-            latest = status['latest']
-            status_icon = '✅' if total_files > 0 else '❌'
-            status_text = f'{total_files} uploaded' if total_files > 0 else 'No uploads'
-            status_color = IRONLADY_COLORS['success'] if total_files > 0 else '#dc3545'
+        for _, row in df.iterrows():
+            username = row['Username']
+            team_name = row['Team_Leader']
             
-            upload_html += f"""
-                            <tr>
-                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">{team_name}</td>
-                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center; font-weight: 700;">{total_files}</td>
-                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;"><small>{categories}</small></td>
-                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;"><small>{latest}</small></td>
-                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;">
-                                    {status_icon} <span style="color: {status_color}; font-weight: 700;">{status_text}</span>
-                                </td>
-                            </tr>
-            """
+            if username in upload_status:
+                status = upload_status[username]
+                total_files = status['total_files']
+                categories = ', '.join(status['categories'][:3])
+                if len(status['categories']) > 3:
+                    categories += f" (+{len(status['categories']) - 3} more)"
+                
+                status_icon = '✅' if total_files > 0 else '❌'
+                status_text = f'{total_files} uploaded' if total_files > 0 else 'No uploads'
+                status_color = IRONLADY_COLORS['success'] if total_files > 0 else '#dc3545'
+                
+                upload_html += f"""
+                <tr>
+                    <td style="padding: 12px;">{team_name}</td>
+                    <td style="padding: 12px; text-align: center; font-weight: 700;">{total_files}</td>
+                    <td style="padding: 12px;"><small>{categories}</small></td>
+                    <td style="padding: 12px; text-align: center;">
+                        {status_icon} <span style="color: {status_color}; font-weight: 700;">{status_text}</span>
+                    </td>
+                </tr>
+                """
+            else:
+                upload_html += f"""
+                <tr>
+                    <td style="padding: 12px;">{team_name}</td>
+                    <td style="padding: 12px; text-align: center;" colspan="3">
+                        <span style="color: #999;">No uploads</span>
+                    </td>
+                </tr>
+                """
         
-        upload_html += """
-                        </tbody>
-                    </table>
-                </div>
-        """
+        upload_html += "</table>"
     else:
         upload_html = f"""
-                <h2 class="section-title">📤 Document Upload Status</h2>
-                <div style="background: {IRONLADY_COLORS['accent']}; padding: 20px; border-left: 5px solid {IRONLADY_COLORS['primary']}; margin: 20px 0;">
-                    <p style="margin: 0;">ℹ️ No upload data available. Team leaders should upload required documents in the app.</p>
-                </div>
+        <h2 class="section-title">📤 Document Upload Status</h2>
+        <div style="background: {IRONLADY_COLORS['accent']}; padding: 20px; margin: 20px 0;">
+            <p>ℹ️ No upload data available for today.</p>
+        </div>
         """
     
-    # Create HTML
+    # Complete HTML
     html = f"""
     <html>
     <head>
         <style>
-            body {{
-                font-family: Arial, sans-serif;
-                background-color: {IRONLADY_COLORS['accent']};
-                margin: 0;
-                padding: 0;
-            }}
-            .container {{
-                max-width: 900px;
-                margin: 20px auto;
-                background: white;
-                border-radius: 10px;
-                overflow: hidden;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            }}
-            .header {{
-                background: linear-gradient(135deg, {IRONLADY_COLORS['primary']} 0%, {IRONLADY_COLORS['secondary']} 100%);
-                color: white;
-                padding: 40px 30px;
-                text-align: center;
-            }}
-            .header h1 {{
-                margin: 0;
-                font-size: 2.5rem;
-                letter-spacing: 3px;
-                font-weight: 900;
-            }}
-            .header p {{
-                margin: 10px 0 0 0;
-                font-size: 1.1rem;
-                opacity: 0.9;
-            }}
-            .content {{
-                padding: 40px 30px;
-            }}
-            .metric {{
-                background: {IRONLADY_COLORS['accent']};
-                padding: 20px;
-                margin: 15px 0;
-                border-left: 5px solid {IRONLADY_COLORS['primary']};
-                border-radius: 5px;
-            }}
-            .section-title {{
-                color: {IRONLADY_COLORS['secondary']};
-                font-size: 1.5rem;
-                font-weight: 900;
-                margin: 30px 0 15px 0;
-                padding-bottom: 10px;
-                border-bottom: 3px solid {IRONLADY_COLORS['primary']};
-            }}
-            table {{
-                border-collapse: collapse;
-                width: 100%;
-                margin: 20px 0;
-            }}
-            th {{
-                background: {IRONLADY_COLORS['secondary']};
-                color: white;
-                padding: 15px;
-                text-align: left;
-                font-weight: 700;
-            }}
-            td {{
-                padding: 12px 15px;
-                border-bottom: 1px solid #e0e0e0;
-            }}
-            tr:hover {{
-                background-color: {IRONLADY_COLORS['accent']};
-            }}
-            .footer {{
-                background: {IRONLADY_COLORS['secondary']};
-                color: white;
-                text-align: center;
-                padding: 30px;
-            }}
-            .highlight {{
-                background: {IRONLADY_COLORS['primary']};
-                color: white;
-                padding: 3px 8px;
-                border-radius: 3px;
-                font-weight: 700;
-            }}
+            body {{ font-family: Arial, sans-serif; background: {IRONLADY_COLORS['accent']}; margin: 0; padding: 0; }}
+            .container {{ max-width: 900px; margin: 20px auto; background: white; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }}
+            .header {{ background: linear-gradient(135deg, {IRONLADY_COLORS['primary']} 0%, {IRONLADY_COLORS['secondary']} 100%); color: white; padding: 40px; text-align: center; }}
+            .header h1 {{ margin: 0; font-size: 2.5rem; letter-spacing: 3px; font-weight: 900; }}
+            .content {{ padding: 40px 30px; }}
+            .section-title {{ color: {IRONLADY_COLORS['secondary']}; font-size: 1.5rem; font-weight: 900; margin: 30px 0 15px; padding-bottom: 10px; border-bottom: 3px solid {IRONLADY_COLORS['primary']}; }}
+            .metric {{ background: {IRONLADY_COLORS['accent']}; padding: 20px; margin: 15px 0; border-left: 5px solid {IRONLADY_COLORS['primary']}; border-radius: 5px; }}
+            table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+            th {{ background: {IRONLADY_COLORS['secondary']}; color: white; padding: 15px; font-weight: 700; }}
+            td {{ padding: 12px; border-bottom: 1px solid #e0e0e0; }}
+            .highlight {{ background: {IRONLADY_COLORS['primary']}; color: white; padding: 3px 8px; border-radius: 3px; font-weight: 700; }}
+            .footer {{ background: {IRONLADY_COLORS['secondary']}; color: white; text-align: center; padding: 30px; }}
         </style>
     </head>
     <body>
@@ -645,27 +453,23 @@ def create_email_html(df, checklist_status={}, upload_status={}):
                 
                 <h2 class="section-title">📋 Activity Summary</h2>
                 <div class="metric">
-                    <strong>WA Audit:</strong> {total_wa_audit}<br/>
-                    <strong>Call Audit:</strong> {total_call_audit}<br/>
+                    <strong>WA Audit:</strong> {total_wa}<br/>
+                    <strong>Call Audit:</strong> {total_call}<br/>
                     <strong>Mocks:</strong> {total_mocks}<br/>
-                    <strong>SL Calls:</strong> {total_sl_calls}<br/>
-                    <strong>Current MC Registrations:</strong> {total_current_mc}
+                    <strong>SL Calls:</strong> {total_sl}<br/>
+                    <strong>Current MC Registrations:</strong> {total_mc}
                 </div>
                 
                 <h2 class="section-title">🏆 Team Leader Performance</h2>
                 <table>
-                    <thead>
-                        <tr>
-                            <th>Team Leader</th>
-                            <th style="text-align: center;">Total RMs</th>
-                            <th style="text-align: center;">Pitches</th>
-                            <th style="text-align: center;">Registrations</th>
-                            <th style="text-align: center;">Conversion %</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {table_rows}
-                    </tbody>
+                    <tr>
+                        <th>Team Leader</th>
+                        <th style="text-align: center;">RMs</th>
+                        <th style="text-align: center;">Pitches</th>
+                        <th style="text-align: center;">Registrations</th>
+                        <th style="text-align: center;">Conversion %</th>
+                    </tr>
+                    {table_rows}
                 </table>
                 
                 {checklist_html}
@@ -674,15 +478,12 @@ def create_email_html(df, checklist_status={}, upload_status={}):
                 
                 <h2 class="section-title">💡 Key Insights</h2>
                 <div class="metric">
-                    {'✅ <strong>Excellent performance!</strong> Team is meeting conversion targets.' if avg_conversion >= 15 else '⚠️ <strong>Action needed:</strong> Team conversion below 15% target.'}
+                    {'✅ <strong>Excellent!</strong> Team meeting targets.' if avg_conversion >= 15 else '⚠️ <strong>Action needed:</strong> Below 15% target.'}
                 </div>
             </div>
             <div class="footer">
                 <p style="font-size: 1.3rem; font-weight: 900;">IRON LADY</p>
-                <p>Team: Ghazala 🏆 | Megha 🏆 | Afreen 🌟 | Soumya 🌟</p>
-                <p style="margin-top: 15px; font-size: 0.9rem; opacity: 0.8;">
-                    © 2024 Iron Lady. All rights reserved.
-                </p>
+                <p>© 2024 Iron Lady. All rights reserved.</p>
             </div>
         </div>
     </body>
@@ -691,154 +492,99 @@ def create_email_html(df, checklist_status={}, upload_status={}):
     
     return html
 
-def send_email(recipient_emails, subject, html_body):
-    """Send email using SMTP"""
+def send_email(recipients, subject, html_body):
+    """Send email"""
     try:
-        # Create message
         msg = MIMEMultipart('alternative')
         msg['From'] = EMAIL_SENDER
-        msg['To'] = ', '.join(recipient_emails) if isinstance(recipient_emails, list) else recipient_emails
+        msg['To'] = ', '.join(recipients)
         msg['Subject'] = subject
         
-        # Attach HTML
         msg.attach(MIMEText(html_body, 'html'))
         
-        # Send email
         server = smtplib.SMTP(EMAIL_SMTP_SERVER, EMAIL_SMTP_PORT)
         server.starttls()
         server.login(EMAIL_SENDER, EMAIL_PASSWORD)
         server.send_message(msg)
         server.quit()
         
-        return True, "Email sent successfully"
-    
+        return True, "Success"
     except Exception as e:
-        return False, f"Error sending email: {str(e)}"
+        return False, str(e)
 
 # ============================================
-# MAIN FUNCTION
+# MAIN
 # ============================================
 
 def main():
-    """Main function to run email automation"""
-    
-    print("🚀 Iron Lady Email Automation Starting...")
-    print(f"📅 Date: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
+    print("🚀 Iron Lady Email Automation")
+    print(f"📅 {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
     print("\n" + "="*60)
-    print("⚙️  CONFIGURATION CHECK")
-    print("="*60)
-    print(f"📧 GMAIL_USER (sender): {'✅ Set' if EMAIL_SENDER else '❌ Missing'}")
-    if EMAIL_SENDER:
-        print(f"   → {EMAIL_SENDER}")
-    print(f"🔑 GMAIL_APP_PASSWORD: {'✅ Set' if EMAIL_PASSWORD else '❌ Missing'}")
-    if EMAIL_PASSWORD:
-        print(f"   → {'*' * len(EMAIL_PASSWORD)} (hidden)")
-    print(f"📬 CEO_EMAIL: {'✅ Set' if CEO_EMAIL else '❌ Missing'}")
-    if CEO_EMAIL:
-        print(f"   → {CEO_EMAIL}")
-    print(f"📬 AUTO_MAIL: {'✅ Set' if AUTO_MAIL else '❌ Missing'}")
-    if AUTO_MAIL:
-        print(f"   → {AUTO_MAIL}")
-    print(f"📮 Combined Recipients: {'✅ ' + str(len(RECIPIENT_EMAILS)) + ' email(s)' if RECIPIENT_EMAILS else '❌ None'}")
-    if RECIPIENT_EMAILS:
-        for email in RECIPIENT_EMAILS:
-            print(f"   → {email}")
-    print(f"🌐 SMTP Server: {EMAIL_SMTP_SERVER}:{EMAIL_SMTP_PORT}")
+    print("CONFIGURATION CHECK")
     print("="*60)
     
-    # Validate configuration
-    errors = []
+    print(f"Gmail: {'✅' if EMAIL_SENDER else '❌'} {EMAIL_SENDER if EMAIL_SENDER else 'Not set'}")
+    print(f"Password: {'✅' if EMAIL_PASSWORD else '❌'}")
+    print(f"Recipients: {'✅' if RECIPIENT_EMAILS else '❌'} {len(RECIPIENT_EMAILS)} email(s)")
+    for email in RECIPIENT_EMAILS:
+        print(f"  → {email}")
+    print(f"Sheet ID: {'✅' if SHEET_ID else '❌'}")
+    print(f"Credentials: {'✅' if CREDENTIALS_JSON else '❌'}")
     
-    if not EMAIL_SENDER:
-        errors.append("❌ GMAIL_USER not set")
-    
-    if not EMAIL_PASSWORD:
-        errors.append("❌ GMAIL_APP_PASSWORD not set")
-    
-    if not RECIPIENT_EMAILS:
-        errors.append("❌ No recipient emails (CEO_EMAIL or AUTO_MAIL)")
-    
-    if errors:
-        print("\n🚨 CONFIGURATION ERRORS:")
-        for error in errors:
-            print(f"   {error}")
-        print("\n💡 SOLUTIONS:")
-        print("   1. Go to: Settings → Secrets and variables → Actions")
-        print("   2. Make sure these secrets are set:")
-        print("      - GMAIL_USER (your Gmail address)")
-        print("      - GMAIL_APP_PASSWORD (16-char app password)")
-        print("      - CEO_EMAIL or AUTO_MAIL (recipient email addresses)")
+    if not all([EMAIL_SENDER, EMAIL_PASSWORD, RECIPIENT_EMAILS, SHEET_ID, CREDENTIALS_JSON]):
+        print("\n❌ Missing required configuration!")
         sys.exit(1)
     
-    print("\n✅ All configuration validated!")
-    
-    # Get data
     print("\n" + "="*60)
-    print("📊 FETCHING DATA FROM GOOGLE SHEETS")
+    print("FETCHING DATA FROM GOOGLE SHEETS")
     print("="*60)
     
-    df = get_data_from_sheets()
+    today = datetime.now().strftime('%Y-%m-%d')
     
-    if df is None or len(df) == 0:
-        print("\n❌ NO DATA AVAILABLE!")
-        print("\n💡 SOLUTIONS:")
-        print("   1. Make sure GOOGLE_SHEETS_CREDENTIALS is set (full JSON)")
-        print("   2. Make sure GOOGLE_SHEET_ID is set")
-        print("   3. Verify your Google Sheet has data in team tabs")
-        print("   4. Expected tabs: Ghazala, Megha, Afreen, Soumya")
-        print("   5. Share your sheet with the service account email")
+    # Get performance data
+    df = get_metrics_data(today)
+    
+    if len(df) == 0:
+        print(f"\n❌ No performance data for {today}")
         sys.exit(1)
     
-    print(f"✅ Data ready: {len(df)} team leaders")
-    print(f"📋 Team Leaders: {', '.join(df['Team_Leader'].tolist())}")
+    print(f"✅ Performance data: {len(df)} team leaders")
+    for _, row in df.iterrows():
+        print(f"  → {row['Team_Leader']}: {row['Total_Pitches']} pitches, {row['Total_Registrations']} regs ({row['Conversion_Rate']}%)")
     
-    # Get checklist status
+    # Get checklist data
     print("\n" + "="*60)
-    print("✅ FETCHING CHECKLIST STATUS")
+    print("FETCHING CHECKLIST STATUS")
     print("="*60)
     
-    checklist_status = get_checklist_status()
+    checklist_status = get_checklist_status(today)
     if checklist_status:
-        print(f"✅ Checklist data loaded for {len(checklist_status)} team leaders")
+        print(f"✅ Checklist data: {len(checklist_status)} team leaders")
         for username, status in checklist_status.items():
-            print(f"   → {username}: {status['completed']}/{status['total']} tasks ({status['percentage']}%)")
+            print(f"  → {username}: {status['completed']}/{status['total']} ({status['percentage']}%) - {status['day_type']}")
     else:
-        print("ℹ️  No checklist data found (this is optional)")
+        print("ℹ️  No checklist data")
     
-    # Get upload status
+    # Get upload data
     print("\n" + "="*60)
-    print("📤 FETCHING UPLOAD STATUS")
+    print("FETCHING UPLOAD STATUS")
     print("="*60)
     
-    upload_status = get_upload_status()
+    upload_status = get_upload_status(today)
     if upload_status:
-        print(f"✅ Upload data loaded for {len(upload_status)} team leaders")
+        print(f"✅ Upload data: {len(upload_status)} team leaders")
         for username, status in upload_status.items():
-            print(f"   → {username}: {status['total_files']} files uploaded")
+            print(f"  → {username}: {status['total_files']} files")
     else:
-        print("ℹ️  No upload data found (this is optional)")
+        print("ℹ️  No upload data")
     
-    # Create email
+    # Create and send email
     print("\n" + "="*60)
-    print("📝 CREATING EMAIL")
+    print("SENDING EMAIL")
     print("="*60)
     
     subject = f"Iron Lady Daily Report - {datetime.now().strftime('%B %d, %Y')}"
-    
     html_body = create_email_html(df, checklist_status, upload_status)
-    print("✅ Email HTML created with all data from Google Sheets")
-    if checklist_status:
-        print("   ✓ Includes checklist completion status")
-    if upload_status:
-        print("   ✓ Includes document upload status")
-    
-    # Send email
-    print("\n" + "="*60)
-    print("📤 SENDING EMAIL")
-    print("="*60)
-    print(f"From: {EMAIL_SENDER}")
-    print(f"To: {', '.join(RECIPIENT_EMAILS)}")
-    print(f"Subject: {subject}")
     
     success, message = send_email(RECIPIENT_EMAILS, subject, html_body)
     
@@ -846,19 +592,13 @@ def main():
     if success:
         print("✅ SUCCESS!")
         print("="*60)
-        print(f"📧 Email sent to {len(RECIPIENT_EMAILS)} recipient(s):")
+        print(f"📧 Email sent to {len(RECIPIENT_EMAILS)} recipients")
         for email in RECIPIENT_EMAILS:
-            print(f"   ✓ {email}")
-        print("\n🎉 Email automation completed successfully!")
+            print(f"  ✓ {email}")
     else:
         print("❌ FAILED!")
         print("="*60)
         print(f"Error: {message}")
-        print("\n💡 TROUBLESHOOTING:")
-        print("   1. Check GMAIL_APP_PASSWORD is correct")
-        print("   2. Make sure it's a 16-character App Password (not regular password)")
-        print("   3. For Gmail: https://myaccount.google.com/apppasswords")
-        print("   4. Enable 2-Factor Authentication first")
         sys.exit(1)
 
 if __name__ == "__main__":

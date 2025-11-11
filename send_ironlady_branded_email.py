@@ -1,45 +1,51 @@
 """
-IRON LADY - Email Automation Script (SQLite Version)
-Reads data from ironlady.db (same database as Streamlit app)
-Sends daily performance reports with checklist and upload status
+IRON LADY - Email Automation Script for GitHub Actions
+FIXED: Reads your actual Google Sheets structure with multiple tabs
+Uses your existing secret names: GMAIL_USER, GMAIL_APP_PASSWORD, CEO_EMAIL, AUTO_MAIL
 """
 
-import sqlite3
 import pandas as pd
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import sys
+import json
+import re
 
 # ============================================
-# CONFIGURATION
+# CONFIGURATION - USING YOUR SECRET NAMES
 # ============================================
 
-# Email configuration
+# Email configuration - using YOUR existing secret names
 EMAIL_SENDER = os.getenv('GMAIL_USER', '').strip()
 EMAIL_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', '').strip()
-EMAIL_SMTP_SERVER = 'smtp.gmail.com'
-EMAIL_SMTP_PORT = 587
+EMAIL_SMTP_SERVER = 'smtp.gmail.com'  # Fixed for Gmail
+EMAIL_SMTP_PORT = 587  # Fixed for Gmail
 
-# Recipients
+# Recipients - using YOUR secret names
 CEO_EMAIL = os.getenv('CEO_EMAIL', '').strip()
 AUTO_MAIL = os.getenv('AUTO_MAIL', '').strip()
 
-# Clean and combine recipient emails
+# Clean and combine all recipient emails (handle newlines, commas, spaces)
 recipient_list = []
 
 if CEO_EMAIL:
+    # Replace newlines and multiple spaces with single space
     cleaned = CEO_EMAIL.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
+    # Split by comma and/or whitespace
     emails = [email.strip() for email in cleaned.replace(',', ' ').split() if email.strip() and '@' in email]
     recipient_list.extend(emails)
 
 if AUTO_MAIL:
+    # Replace newlines and multiple spaces with single space
     cleaned = AUTO_MAIL.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
+    # Split by comma and/or whitespace
     emails = [email.strip() for email in cleaned.replace(',', ' ').split() if email.strip() and '@' in email]
     recipient_list.extend(emails)
 
+# Remove duplicates and invalid emails
 RECIPIENT_EMAILS = list(set([email for email in recipient_list if email and '@' in email and '.' in email]))
 
 # Iron Lady Colors
@@ -50,154 +56,336 @@ IRONLADY_COLORS = {
     'success': '#2A9D8F',
 }
 
-# Database file
-DB_FILE = 'ironlady.db'
-
 # ============================================
-# DATABASE FUNCTIONS
+# CHECKLIST & UPLOAD DATA
 # ============================================
 
-def get_team_performance_data(date_str=None):
-    """
-    Get team performance data from SQLite database
-    If date_str is None, gets data from today
-    """
-    try:
-        if date_str is None:
-            date_str = datetime.now().strftime('%Y-%m-%d')
-        
-        conn = sqlite3.connect(DB_FILE, timeout=10)
-        
-        # Query to get aggregated data per team leader
-        query = '''
-            SELECT 
-                u.username,
-                u.name as Team_Leader,
-                u.team_size as Total_RMs,
-                COALESCE(SUM(m.wa_audit_achieved), 0) as Total_WA_Audit,
-                COALESCE(SUM(m.call_audit_achieved), 0) as Total_Call_Audit,
-                COALESCE(SUM(m.mocks_achieved), 0) as Total_Mocks,
-                COALESCE(SUM(m.sl_calls_achieved), 0) as Total_SL_Calls,
-                COALESCE(SUM(m.pitches_achieved), 0) as Total_Pitches,
-                COALESCE(SUM(m.followups_achieved), 0) as Total_Registrations,
-                COALESCE(SUM(m.current_mc_achieved), 0) as Total_Current_MC
-            FROM users u
-            LEFT JOIN rm_daily_metrics m ON u.username = m.username AND m.date = ?
-            GROUP BY u.username, u.name, u.team_size
-            ORDER BY u.name
-        '''
-        
-        df = pd.read_sql_query(query, conn, params=(date_str,))
-        conn.close()
-        
-        if len(df) > 0:
-            # Calculate conversion rate
-            df['Conversion_Rate'] = df.apply(
-                lambda row: round((row['Total_Registrations'] / row['Total_Pitches'] * 100), 1) 
-                if row['Total_Pitches'] > 0 else 0.0,
-                axis=1
-            )
-        
-        return df
-    
-    except Exception as e:
-        print(f"❌ Error fetching team performance: {e}")
-        return pd.DataFrame()
-
-def get_checklist_status(date_str=None):
+def get_checklist_status():
     """
     Get checklist completion status for each team leader
     Returns dict: {username: {'day_type': 'Day 1-1', 'completed': 15, 'total': 20, 'percentage': 75}}
     """
     try:
-        if date_str is None:
-            date_str = datetime.now().strftime('%Y-%m-%d')
+        import gspread
+        from google.oauth2.service_account import Credentials
         
-        conn = sqlite3.connect(DB_FILE, timeout=10)
-        cursor = conn.cursor()
+        credentials_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS", "").strip()
+        sheet_id = os.getenv('GOOGLE_SHEET_ID', '').strip()
         
-        # Get checklist data for each user
-        cursor.execute('''
-            SELECT username, day_type, COUNT(*) as total_tasks, 
-                   SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as completed_tasks
-            FROM checklists
-            WHERE date = ?
-            GROUP BY username, day_type
-        ''', (date_str,))
+        if not credentials_json or not sheet_id:
+            return {}
         
-        results = cursor.fetchall()
-        conn.close()
+        credentials_dict = json.loads(credentials_json)
+        credentials = Credentials.from_service_account_info(
+            credentials_dict,
+            scopes=[
+                'https://www.googleapis.com/auth/spreadsheets.readonly',
+                'https://www.googleapis.com/auth/drive.readonly'
+            ]
+        )
         
-        checklist_status = {}
-        for row in results:
-            username, day_type, total_tasks, completed_tasks = row
-            percentage = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
+        client = gspread.authorize(credentials)
+        spreadsheet = client.open_by_key(sheet_id)
+        
+        # Try to find a "Checklists" worksheet
+        try:
+            worksheet = spreadsheet.worksheet("Checklists")
+            data = worksheet.get_all_records()
             
-            checklist_status[username] = {
-                'day_type': day_type,
-                'completed': completed_tasks,
-                'total': total_tasks,
-                'percentage': percentage
-            }
+            if not data:
+                return {}
+            
+            df = pd.DataFrame(data)
+            
+            # Aggregate by username
+            checklist_status = {}
+            
+            for username in df['Username'].unique():
+                user_data = df[df['Username'] == username]
+                total_tasks = len(user_data)
+                completed_tasks = len(user_data[user_data['Completed'] == True])
+                day_type = user_data['Day_Type'].iloc[0] if len(user_data) > 0 else 'Unknown'
+                
+                checklist_status[username] = {
+                    'day_type': day_type,
+                    'completed': completed_tasks,
+                    'total': total_tasks,
+                    'percentage': round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
+                }
+            
+            return checklist_status
         
-        return checklist_status
+        except:
+            # No Checklists worksheet found
+            return {}
     
     except Exception as e:
         print(f"⚠️ Could not fetch checklist data: {e}")
         return {}
 
-def get_upload_status(date_str=None):
+def get_upload_status():
     """
     Get document upload status for each team leader
     Returns dict: {username: {'total_files': 5, 'categories': ['WA Audit', 'Call Recording'], 'latest': '2024-11-07'}}
     """
     try:
-        if date_str is None:
-            date_str = datetime.now().strftime('%Y-%m-%d')
+        import gspread
+        from google.oauth2.service_account import Credentials
         
-        conn = sqlite3.connect(DB_FILE, timeout=10)
+        credentials_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS", "").strip()
+        sheet_id = os.getenv('GOOGLE_SHEET_ID', '').strip()
         
-        # Get upload data for each user
-        query = '''
-            SELECT username, category, filename, upload_time
-            FROM uploads
-            WHERE date = ?
-            ORDER BY upload_time DESC
-        '''
-        
-        df = pd.read_sql_query(query, conn, params=(date_str,))
-        conn.close()
-        
-        if len(df) == 0:
+        if not credentials_json or not sheet_id:
             return {}
         
-        # Aggregate by username
-        upload_status = {}
+        credentials_dict = json.loads(credentials_json)
+        credentials = Credentials.from_service_account_info(
+            credentials_dict,
+            scopes=[
+                'https://www.googleapis.com/auth/spreadsheets.readonly',
+                'https://www.googleapis.com/auth/drive.readonly'
+            ]
+        )
         
-        for username in df['username'].unique():
-            user_data = df[df['username'] == username]
-            total_files = len(user_data)
-            categories = user_data['category'].unique().tolist()
-            latest = user_data['upload_time'].iloc[0] if len(user_data) > 0 else 'Unknown'
+        client = gspread.authorize(credentials)
+        spreadsheet = client.open_by_key(sheet_id)
+        
+        # Try to find an "Uploads" worksheet
+        try:
+            worksheet = spreadsheet.worksheet("Uploads")
+            data = worksheet.get_all_records()
             
-            upload_status[username] = {
-                'total_files': total_files,
-                'categories': categories,
-                'latest': latest
-            }
+            if not data:
+                return {}
+            
+            df = pd.DataFrame(data)
+            
+            # Aggregate by username
+            upload_status = {}
+            
+            for username in df['Username'].unique():
+                user_data = df[df['Username'] == username]
+                total_files = len(user_data)
+                categories = user_data['Category'].unique().tolist()
+                latest = user_data['Upload_Time'].max() if 'Upload_Time' in user_data.columns else 'Unknown'
+                
+                upload_status[username] = {
+                    'total_files': total_files,
+                    'categories': categories,
+                    'latest': latest
+                }
+            
+            return upload_status
         
-        return upload_status
+        except:
+            # No Uploads worksheet found
+            return {}
     
     except Exception as e:
         print(f"⚠️ Could not fetch upload data: {e}")
         return {}
 
 # ============================================
+# GOOGLE SHEETS CONNECTION - FIXED FOR YOUR STRUCTURE
+# ============================================
+
+def parse_team_sheet(worksheet):
+    """Parse a team leader's worksheet with your actual structure"""
+    try:
+        all_data = worksheet.get_all_values()
+        
+        # Find the team leader name from the sheet
+        team_name = None
+        for row in all_data[:10]:
+            if len(row) > 1 and row[1] and ('-' in row[1] or 'Rising' in row[1] or 'Winners' in row[1] or 'Flyers' in row[1] or 'Getters' in row[1]):
+                team_name = row[1]
+                break
+        
+        # Initialize aggregates
+        total_wa_audit = 0
+        total_call_audit = 0
+        total_mocks = 0
+        total_sl_calls = 0
+        total_registrations = 0
+        total_pitches = 0
+        total_current_mc = 0
+        rm_count = 0
+        
+        # Parse each row looking for achieved values
+        for row in all_data:
+            if len(row) < 15:
+                continue
+            
+            # Check if this is a data row (has RM name and numbers)
+            rm_name = row[1] if len(row) > 1 else ''
+            
+            # Skip header rows and team name rows
+            if not rm_name or 'RM Name' in rm_name or 'Target' in rm_name or 'Achieved' in rm_name:
+                continue
+            if team_name and team_name in rm_name:
+                continue
+            
+            # Try to extract achieved values from various columns
+            try:
+                # WA Audit Achieved (column D, index 3)
+                if len(row) > 3 and row[3] and row[3].strip() and row[3].strip().replace('-', '').isdigit():
+                    total_wa_audit += abs(int(row[3]))
+                
+                # Call Audit Achieved (column F, index 5)
+                if len(row) > 5 and row[5] and row[5].strip() and row[5].strip().replace('-', '').isdigit():
+                    total_call_audit += abs(int(row[5]))
+                
+                # Mocks Achieved (column H, index 7)
+                if len(row) > 7 and row[7] and row[7].strip() and row[7].strip().replace('-', '').isdigit():
+                    total_mocks += abs(int(row[7]))
+                
+                # SL Calls Achieved (column J, index 9)
+                if len(row) > 9 and row[9] and row[9].strip() and row[9].strip().replace('-', '').isdigit():
+                    total_sl_calls += abs(int(row[9]))
+                
+                # Follow ups Registrations Achieved (column L, index 11)
+                if len(row) > 11 and row[11] and row[11].strip():
+                    val = row[11].strip()
+                    # Extract number even if it has text (like "1-Shwetha")
+                    num = re.findall(r'\d+', val)
+                    if num:
+                        total_registrations += int(num[0])
+                
+                # Pitches Achieved (column N, index 13)
+                if len(row) > 13 and row[13] and row[13].strip() and row[13].strip().replace('-', '').isdigit():
+                    total_pitches += abs(int(row[13]))
+                
+                # Current MC Registrations Achieved (column P, index 15)
+                if len(row) > 15 and row[15] and row[15].strip() and row[15].strip().replace('-', '').isdigit():
+                    total_current_mc += abs(int(row[15]))
+                
+                # Count this RM if they have any data
+                if any([row[3], row[5], row[7], row[9], row[11], row[13], row[15]]):
+                    rm_count += 1
+            except:
+                continue
+        
+        # Calculate conversion rate
+        conversion_rate = round((total_registrations / total_pitches * 100), 1) if total_pitches > 0 else 0.0
+        
+        return {
+            'Team_Leader': team_name if team_name else 'Unknown',
+            'Total_RMs': rm_count,
+            'Total_WA_Audit': total_wa_audit,
+            'Total_Call_Audit': total_call_audit,
+            'Total_Mocks': total_mocks,
+            'Total_SL_Calls': total_sl_calls,
+            'Total_Pitches': total_pitches,
+            'Total_Registrations': total_registrations,
+            'Total_Current_MC': total_current_mc,
+            'Conversion_Rate': conversion_rate
+        }
+    
+    except Exception as e:
+        print(f"⚠️ Error parsing sheet: {e}")
+        return None
+
+def get_data_from_sheets():
+    """
+    Fetch data from YOUR actual Google Sheets structure
+    Reads all team sheets (Ghazala, Megha, Afreen, Soumya)
+    """
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+        
+        # Get credentials from environment
+        credentials_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS", "").strip()
+        sheet_id = os.getenv('GOOGLE_SHEET_ID', '').strip()
+        
+        if not credentials_json:
+            print("⚠️ GOOGLE_SHEETS_CREDENTIALS not set")
+            return None
+        
+        if not sheet_id:
+            print("⚠️ GOOGLE_SHEET_ID not set")
+            return None
+        
+        # Parse JSON credentials
+        credentials_dict = json.loads(credentials_json)
+        
+        credentials = Credentials.from_service_account_info(
+            credentials_dict,
+            scopes=[
+                'https://www.googleapis.com/auth/spreadsheets.readonly',
+                'https://www.googleapis.com/auth/drive.readonly'
+            ]
+        )
+        
+        client = gspread.authorize(credentials)
+        
+        print(f"📊 Connecting to Google Sheet: {sheet_id}")
+        spreadsheet = client.open_by_key(sheet_id)
+        
+        # Get all worksheets
+        worksheets = spreadsheet.worksheets()
+        print(f"📋 Found {len(worksheets)} worksheets")
+        
+        # Map worksheet names to team leaders
+        sheet_mapping = {
+            'Ghazala': 'ghazala',
+            'Megha': 'megha',
+            'Afreen': 'afreen',
+            'Soumya': 'soumya'
+        }
+        
+        team_data = []
+        
+        # Parse each team leader's sheet
+        for worksheet in worksheets:
+            sheet_title = worksheet.title
+            print(f"   Checking sheet: {sheet_title}")
+            
+            # Find matching team leader
+            matched = False
+            for sheet_name in sheet_mapping.keys():
+                if sheet_name.lower() in sheet_title.lower():
+                    print(f"      ✓ Matched as {sheet_name}")
+                    
+                    # Parse the sheet
+                    data = parse_team_sheet(worksheet)
+                    
+                    if data and data['Total_Pitches'] > 0:
+                        team_data.append(data)
+                        print(f"      ✓ Loaded data: {data['Total_Pitches']} pitches, {data['Total_Registrations']} registrations")
+                    else:
+                        print(f"      ⚠️ No data found in sheet")
+                    
+                    matched = True
+                    break
+            
+            if not matched:
+                print(f"      - Skipped (not a team leader sheet)")
+        
+        if not team_data:
+            print("⚠️ No team data found in any sheets")
+            return None
+        
+        print(f"✅ Loaded data from {len(team_data)} team sheets")
+        df = pd.DataFrame(team_data)
+        
+        return df
+    
+    except json.JSONDecodeError as e:
+        print(f"❌ Invalid GOOGLE_SHEETS_CREDENTIALS JSON: {e}")
+        return None
+    except Exception as e:
+        print(f"❌ Error fetching from Google Sheets: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+# ============================================
 # EMAIL FUNCTIONS
 # ============================================
 
 def create_email_html(df, checklist_status={}, upload_status={}):
-    """Create HTML email with Iron Lady branding"""
+    """Create HTML email with Iron Lady branding including checklist and upload status"""
     
     # Calculate totals
     total_rms = int(df['Total_RMs'].sum())
@@ -205,37 +393,23 @@ def create_email_html(df, checklist_status={}, upload_status={}):
     total_registrations = int(df['Total_Registrations'].sum())
     avg_conversion = round((total_registrations / total_pitches * 100), 1) if total_pitches > 0 else 0
     
-    total_wa_audit = int(df['Total_WA_Audit'].sum())
-    total_call_audit = int(df['Total_Call_Audit'].sum())
-    total_mocks = int(df['Total_Mocks'].sum())
-    total_sl_calls = int(df['Total_SL_Calls'].sum())
-    total_current_mc = int(df['Total_Current_MC'].sum())
+    total_wa_audit = int(df['Total_WA_Audit'].sum()) if 'Total_WA_Audit' in df.columns else 0
+    total_call_audit = int(df['Total_Call_Audit'].sum()) if 'Total_Call_Audit' in df.columns else 0
+    total_mocks = int(df['Total_Mocks'].sum()) if 'Total_Mocks' in df.columns else 0
+    total_sl_calls = int(df['Total_SL_Calls'].sum()) if 'Total_SL_Calls' in df.columns else 0
+    total_current_mc = int(df['Total_Current_MC'].sum()) if 'Total_Current_MC' in df.columns else 0
     
     # Create table rows for team performance
     table_rows = ""
     for _, row in df.iterrows():
         conversion = row.get('Conversion_Rate', 0)
-        
-        # Color code conversion rate
-        if conversion >= 15:
-            conv_color = IRONLADY_COLORS['success']
-            conv_icon = '✅'
-        elif conversion >= 10:
-            conv_color = IRONLADY_COLORS['primary']
-            conv_icon = '⚠️'
-        else:
-            conv_color = '#dc3545'
-            conv_icon = '❌'
-        
         table_rows += f"""
         <tr>
             <td style="padding: 12px 15px; border-bottom: 1px solid #e0e0e0;">{row['Team_Leader']}</td>
             <td style="padding: 12px 15px; border-bottom: 1px solid #e0e0e0; text-align: center;">{row['Total_RMs']}</td>
             <td style="padding: 12px 15px; border-bottom: 1px solid #e0e0e0; text-align: center;">{row['Total_Pitches']}</td>
             <td style="padding: 12px 15px; border-bottom: 1px solid #e0e0e0; text-align: center;">{row['Total_Registrations']}</td>
-            <td style="padding: 12px 15px; border-bottom: 1px solid #e0e0e0; text-align: center;">
-                {conv_icon} <span style="color: {conv_color}; font-weight: 700;">{conversion}%</span>
-            </td>
+            <td style="padding: 12px 15px; border-bottom: 1px solid #e0e0e0; text-align: center; font-weight: 700;">{conversion}%</td>
         </tr>
         """
     
@@ -258,19 +432,22 @@ def create_email_html(df, checklist_status={}, upload_status={}):
                         <tbody>
         """
         
-        # Process checklist for each team leader in df
-        for _, row in df.iterrows():
-            username = row['username']
-            team_name = row['Team_Leader']
+        # Map usernames to team leader names
+        username_map = {
+            'ghazala': 'Ghazala - Rising Stars',
+            'megha': 'Megha - Winners',
+            'afreen': 'Afreen - High Flyers',
+            'soumya': 'Soumya - Goal Getters'
+        }
+        
+        for username, status in checklist_status.items():
+            team_name = username_map.get(username, username.capitalize())
+            percentage = status['percentage']
+            status_icon = '✅' if percentage == 100 else '⚠️' if percentage >= 50 else '❌'
+            status_text = 'Complete' if percentage == 100 else 'In Progress' if percentage > 0 else 'Not Started'
+            status_color = IRONLADY_COLORS['success'] if percentage == 100 else IRONLADY_COLORS['primary'] if percentage >= 50 else '#dc3545'
             
-            if username in checklist_status:
-                status = checklist_status[username]
-                percentage = status['percentage']
-                status_icon = '✅' if percentage == 100 else '⚠️' if percentage >= 50 else '❌'
-                status_text = 'Complete' if percentage == 100 else 'In Progress' if percentage > 0 else 'Not Started'
-                status_color = IRONLADY_COLORS['success'] if percentage == 100 else IRONLADY_COLORS['primary'] if percentage >= 50 else '#dc3545'
-                
-                checklist_html += f"""
+            checklist_html += f"""
                             <tr>
                                 <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">{team_name}</td>
                                 <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;">{status['day_type']}</td>
@@ -284,17 +461,7 @@ def create_email_html(df, checklist_status={}, upload_status={}):
                                     {status_icon} <span style="color: {status_color}; font-weight: 700;">{status_text}</span>
                                 </td>
                             </tr>
-                """
-            else:
-                # No checklist data for this user
-                checklist_html += f"""
-                            <tr>
-                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">{team_name}</td>
-                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;" colspan="4">
-                                    <span style="color: #999;">No checklist data</span>
-                                </td>
-                            </tr>
-                """
+            """
         
         checklist_html += """
                         </tbody>
@@ -305,7 +472,7 @@ def create_email_html(df, checklist_status={}, upload_status={}):
         checklist_html = f"""
                 <h2 class="section-title">✅ Daily Checklist Status</h2>
                 <div style="background: {IRONLADY_COLORS['accent']}; padding: 20px; border-left: 5px solid {IRONLADY_COLORS['primary']}; margin: 20px 0;">
-                    <p style="margin: 0;">ℹ️ No checklist data available for today. Team leaders should complete their daily checklists in the app.</p>
+                    <p style="margin: 0;">ℹ️ No checklist data available. Team leaders should complete their daily checklists in the app.</p>
                 </div>
         """
     
@@ -328,23 +495,26 @@ def create_email_html(df, checklist_status={}, upload_status={}):
                         <tbody>
         """
         
-        # Process uploads for each team leader in df
-        for _, row in df.iterrows():
-            username = row['username']
-            team_name = row['Team_Leader']
+        # Map usernames to team leader names
+        username_map = {
+            'ghazala': 'Ghazala - Rising Stars',
+            'megha': 'Megha - Winners',
+            'afreen': 'Afreen - High Flyers',
+            'soumya': 'Soumya - Goal Getters'
+        }
+        
+        for username, status in upload_status.items():
+            team_name = username_map.get(username, username.capitalize())
+            total_files = status['total_files']
+            categories = ', '.join(status['categories'][:3])  # Show first 3 categories
+            if len(status['categories']) > 3:
+                categories += f" (+{len(status['categories']) - 3} more)"
+            latest = status['latest']
+            status_icon = '✅' if total_files > 0 else '❌'
+            status_text = f'{total_files} uploaded' if total_files > 0 else 'No uploads'
+            status_color = IRONLADY_COLORS['success'] if total_files > 0 else '#dc3545'
             
-            if username in upload_status:
-                status = upload_status[username]
-                total_files = status['total_files']
-                categories = ', '.join(status['categories'][:3])
-                if len(status['categories']) > 3:
-                    categories += f" (+{len(status['categories']) - 3} more)"
-                latest = status['latest']
-                status_icon = '✅' if total_files > 0 else '❌'
-                status_text = f'{total_files} uploaded' if total_files > 0 else 'No uploads'
-                status_color = IRONLADY_COLORS['success'] if total_files > 0 else '#dc3545'
-                
-                upload_html += f"""
+            upload_html += f"""
                             <tr>
                                 <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">{team_name}</td>
                                 <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center; font-weight: 700;">{total_files}</td>
@@ -354,17 +524,7 @@ def create_email_html(df, checklist_status={}, upload_status={}):
                                     {status_icon} <span style="color: {status_color}; font-weight: 700;">{status_text}</span>
                                 </td>
                             </tr>
-                """
-            else:
-                # No upload data for this user
-                upload_html += f"""
-                            <tr>
-                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">{team_name}</td>
-                                <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;" colspan="4">
-                                    <span style="color: #999;">No uploads today</span>
-                                </td>
-                            </tr>
-                """
+            """
         
         upload_html += """
                         </tbody>
@@ -375,7 +535,7 @@ def create_email_html(df, checklist_status={}, upload_status={}):
         upload_html = f"""
                 <h2 class="section-title">📤 Document Upload Status</h2>
                 <div style="background: {IRONLADY_COLORS['accent']}; padding: 20px; border-left: 5px solid {IRONLADY_COLORS['primary']}; margin: 20px 0;">
-                    <p style="margin: 0;">ℹ️ No upload data available for today. Team leaders should upload required documents in the app.</p>
+                    <p style="margin: 0;">ℹ️ No upload data available. Team leaders should upload required documents in the app.</p>
                 </div>
         """
     
@@ -519,6 +679,7 @@ def create_email_html(df, checklist_status={}, upload_status={}):
             </div>
             <div class="footer">
                 <p style="font-size: 1.3rem; font-weight: 900;">IRON LADY</p>
+                <p>Team: Ghazala 🏆 | Megha 🏆 | Afreen 🌟 | Soumya 🌟</p>
                 <p style="margin-top: 15px; font-size: 0.9rem; opacity: 0.8;">
                     © 2024 Iron Lady. All rights reserved.
                 </p>
@@ -533,13 +694,16 @@ def create_email_html(df, checklist_status={}, upload_status={}):
 def send_email(recipient_emails, subject, html_body):
     """Send email using SMTP"""
     try:
+        # Create message
         msg = MIMEMultipart('alternative')
         msg['From'] = EMAIL_SENDER
         msg['To'] = ', '.join(recipient_emails) if isinstance(recipient_emails, list) else recipient_emails
         msg['Subject'] = subject
         
+        # Attach HTML
         msg.attach(MIMEText(html_body, 'html'))
         
+        # Send email
         server = smtplib.SMTP(EMAIL_SMTP_SERVER, EMAIL_SMTP_PORT)
         server.starttls()
         server.login(EMAIL_SENDER, EMAIL_PASSWORD)
@@ -563,25 +727,23 @@ def main():
     print("\n" + "="*60)
     print("⚙️  CONFIGURATION CHECK")
     print("="*60)
-    
-    # Check database file
-    if not os.path.exists(DB_FILE):
-        print(f"❌ Database file not found: {DB_FILE}")
-        print("   Make sure the Streamlit app has been run and created the database")
-        sys.exit(1)
-    else:
-        print(f"✅ Database file found: {DB_FILE}")
-    
     print(f"📧 GMAIL_USER (sender): {'✅ Set' if EMAIL_SENDER else '❌ Missing'}")
     if EMAIL_SENDER:
         print(f"   → {EMAIL_SENDER}")
     print(f"🔑 GMAIL_APP_PASSWORD: {'✅ Set' if EMAIL_PASSWORD else '❌ Missing'}")
     if EMAIL_PASSWORD:
-        print(f"   → {'*' * min(len(EMAIL_PASSWORD), 16)} (hidden)")
-    print(f"📮 Recipients: {'✅ ' + str(len(RECIPIENT_EMAILS)) + ' email(s)' if RECIPIENT_EMAILS else '❌ None'}")
+        print(f"   → {'*' * len(EMAIL_PASSWORD)} (hidden)")
+    print(f"📬 CEO_EMAIL: {'✅ Set' if CEO_EMAIL else '❌ Missing'}")
+    if CEO_EMAIL:
+        print(f"   → {CEO_EMAIL}")
+    print(f"📬 AUTO_MAIL: {'✅ Set' if AUTO_MAIL else '❌ Missing'}")
+    if AUTO_MAIL:
+        print(f"   → {AUTO_MAIL}")
+    print(f"📮 Combined Recipients: {'✅ ' + str(len(RECIPIENT_EMAILS)) + ' email(s)' if RECIPIENT_EMAILS else '❌ None'}")
     if RECIPIENT_EMAILS:
         for email in RECIPIENT_EMAILS:
             print(f"   → {email}")
+    print(f"🌐 SMTP Server: {EMAIL_SMTP_SERVER}:{EMAIL_SMTP_PORT}")
     print("="*60)
     
     # Validate configuration
@@ -600,55 +762,61 @@ def main():
         print("\n🚨 CONFIGURATION ERRORS:")
         for error in errors:
             print(f"   {error}")
+        print("\n💡 SOLUTIONS:")
+        print("   1. Go to: Settings → Secrets and variables → Actions")
+        print("   2. Make sure these secrets are set:")
+        print("      - GMAIL_USER (your Gmail address)")
+        print("      - GMAIL_APP_PASSWORD (16-char app password)")
+        print("      - CEO_EMAIL or AUTO_MAIL (recipient email addresses)")
         sys.exit(1)
     
     print("\n✅ All configuration validated!")
     
-    # Get today's date
-    today = datetime.now().strftime('%Y-%m-%d')
-    
-    # Get team performance data
+    # Get data
     print("\n" + "="*60)
-    print(f"📊 FETCHING DATA FROM DATABASE ({today})")
+    print("📊 FETCHING DATA FROM GOOGLE SHEETS")
     print("="*60)
     
-    df = get_team_performance_data(today)
+    df = get_data_from_sheets()
     
-    if len(df) == 0:
+    if df is None or len(df) == 0:
         print("\n❌ NO DATA AVAILABLE!")
-        print(f"   No performance data found for {today}")
-        print("   Make sure team leaders have entered data in the Streamlit app")
+        print("\n💡 SOLUTIONS:")
+        print("   1. Make sure GOOGLE_SHEETS_CREDENTIALS is set (full JSON)")
+        print("   2. Make sure GOOGLE_SHEET_ID is set")
+        print("   3. Verify your Google Sheet has data in team tabs")
+        print("   4. Expected tabs: Ghazala, Megha, Afreen, Soumya")
+        print("   5. Share your sheet with the service account email")
         sys.exit(1)
     
-    print(f"✅ Performance data loaded: {len(df)} team leaders")
-    for _, row in df.iterrows():
-        print(f"   → {row['Team_Leader']}: {row['Total_Pitches']} pitches, {row['Total_Registrations']} registrations ({row['Conversion_Rate']}%)")
+    print(f"✅ Data ready: {len(df)} team leaders")
+    print(f"📋 Team Leaders: {', '.join(df['Team_Leader'].tolist())}")
     
     # Get checklist status
     print("\n" + "="*60)
     print("✅ FETCHING CHECKLIST STATUS")
     print("="*60)
     
-    checklist_status = get_checklist_status(today)
+    checklist_status = get_checklist_status()
     if checklist_status:
         print(f"✅ Checklist data loaded for {len(checklist_status)} team leaders")
         for username, status in checklist_status.items():
-            print(f"   → {username}: {status['completed']}/{status['total']} tasks ({status['percentage']}%) - {status['day_type']}")
+            print(f"   → {username}: {status['completed']}/{status['total']} tasks ({status['percentage']}%)")
     else:
-        print("ℹ️  No checklist data found for today")
+        print("ℹ️  No checklist data found (this is optional)")
     
     # Get upload status
     print("\n" + "="*60)
     print("📤 FETCHING UPLOAD STATUS")
     print("="*60)
     
-    upload_status = get_upload_status(today)
+    upload_status = get_upload_status()
     if upload_status:
         print(f"✅ Upload data loaded for {len(upload_status)} team leaders")
         for username, status in upload_status.items():
-            print(f"   → {username}: {status['total_files']} files in {len(status['categories'])} categories")
+            print(f"   → {username}: {status['total_files']} files uploaded")
     else:
-        print("ℹ️  No upload data found for today")
+        print("ℹ️  No upload data found (this is optional)")
     
     # Create email
     print("\n" + "="*60)
@@ -656,12 +824,13 @@ def main():
     print("="*60)
     
     subject = f"Iron Lady Daily Report - {datetime.now().strftime('%B %d, %Y')}"
-    html_body = create_email_html(df, checklist_status, upload_status)
     
-    print("✅ Email HTML created")
-    print(f"   - Team performance: {len(df)} leaders")
-    print(f"   - Checklist status: {len(checklist_status)} leaders")
-    print(f"   - Upload status: {len(upload_status)} leaders")
+    html_body = create_email_html(df, checklist_status, upload_status)
+    print("✅ Email HTML created with all data from Google Sheets")
+    if checklist_status:
+        print("   ✓ Includes checklist completion status")
+    if upload_status:
+        print("   ✓ Includes document upload status")
     
     # Send email
     print("\n" + "="*60)
@@ -677,7 +846,7 @@ def main():
     if success:
         print("✅ SUCCESS!")
         print("="*60)
-        print(f"📧 Email sent to {len(RECIPIENT_EMAILS)} recipient(s)")
+        print(f"📧 Email sent to {len(RECIPIENT_EMAILS)} recipient(s):")
         for email in RECIPIENT_EMAILS:
             print(f"   ✓ {email}")
         print("\n🎉 Email automation completed successfully!")
@@ -685,6 +854,11 @@ def main():
         print("❌ FAILED!")
         print("="*60)
         print(f"Error: {message}")
+        print("\n💡 TROUBLESHOOTING:")
+        print("   1. Check GMAIL_APP_PASSWORD is correct")
+        print("   2. Make sure it's a 16-character App Password (not regular password)")
+        print("   3. For Gmail: https://myaccount.google.com/apppasswords")
+        print("   4. Enable 2-Factor Authentication first")
         sys.exit(1)
 
 if __name__ == "__main__":

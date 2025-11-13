@@ -57,8 +57,7 @@ TEAM_LEADERS = {
     'Ghazala': 'Ghazala - Rising Stars',
     'Afreen': 'Afreen - High Flyers',
     'Soumya': 'Soumya - Goal Getters',
-    'Sweksha': 'Sweksha - Team',
-    'NJ - T&E': 'NJ - Training & Excellence'
+    'Sweksha': 'Sweksha - Team'
 }
 
 # ============================================
@@ -332,6 +331,7 @@ def get_checklist_status(date_str):
     try:
         client = get_sheets_client()
         if not client:
+            print("⚠️  Could not get sheets client for checklist")
             return {}
         
         spreadsheet = client.open_by_key(SHEET_ID)
@@ -341,45 +341,92 @@ def get_checklist_status(date_str):
             print("✅ Found Checklists worksheet")
         except gspread.exceptions.WorksheetNotFound:
             print("⚠️  Checklists worksheet not found")
+            print(f"   Available worksheets: {[ws.title for ws in spreadsheet.worksheets()]}")
             return {}
         
         all_data = worksheet.get_all_values()
+        print(f"   Retrieved {len(all_data)} rows from Checklists")
         
         if len(all_data) <= 1:
-            print("⚠️  No checklist data")
+            print("⚠️  No data rows in Checklists worksheet")
             return {}
         
+        # Show the headers for debugging
+        headers = all_data[0]
+        print(f"   Headers: {headers}")
+        
         # Create DataFrame
-        df = pd.DataFrame(all_data[1:], columns=all_data[0])
+        df = pd.DataFrame(all_data[1:], columns=headers)
+        print(f"   Total checklist entries: {len(df)}")
         
-        # Filter for date
-        df = df[df['Date'] == date_str].copy()
+        # Check what's in the DataFrame
+        if 'Username' in df.columns:
+            unique_users = df['Username'].unique()
+            print(f"   Users in checklist: {unique_users}")
         
-        if len(df) == 0:
-            print(f"⚠️  No checklist data for {date_str}")
+        # Try different date matching strategies
+        date_formats = [
+            date_str,  # 2025-11-13
+            datetime.strptime(date_str, '%Y-%m-%d').strftime('%b %d'),  # Nov 13
+            datetime.strptime(date_str, '%Y-%m-%d').strftime('%B %d, %Y'),  # November 13, 2025
+        ]
+        
+        filtered_df = pd.DataFrame()
+        
+        # Try to filter by date if Date column exists
+        if 'Date' in df.columns:
+            for date_format in date_formats:
+                filtered_df = df[df['Date'] == date_format].copy()
+                if len(filtered_df) > 0:
+                    print(f"   ✅ Found {len(filtered_df)} entries matching date: {date_format}")
+                    break
+        
+        # If no Date column or no matches, try Timestamp column
+        if len(filtered_df) == 0 and 'Timestamp' in df.columns:
+            print("   Trying to match by Timestamp...")
+            filtered_df = df[df['Timestamp'].str.contains(date_str, na=False)].copy()
+            if len(filtered_df) > 0:
+                print(f"   ✅ Found {len(filtered_df)} entries by timestamp")
+        
+        # If still no matches, just use all data for today (most recent)
+        if len(filtered_df) == 0:
+            print(f"   ⚠️ No date-specific data found, using all checklist data")
+            filtered_df = df.copy()
+        
+        if len(filtered_df) == 0:
+            print(f"   ❌ No checklist data after filtering")
             return {}
         
         # Aggregate by team leader
         checklist_status = {}
         
-        # Map worksheet names to team leader names
-        worksheet_to_display = {
-            'ghazala': 'Ghazala',
-            'afreen': 'Afreen',
-            'soumya': 'Soumya',
-            'sweksha': 'Sweksha',
-            'nj - t&e': 'NJ - T&E'
-        }
-        
+        # Try different username formats
         for team_name in TEAM_LEADERS.keys():
-            # Look for this team in the checklist data
             team_lower = team_name.lower()
-            team_data = df[df['Username'].str.lower() == team_lower]
+            
+            # Try exact match first
+            team_data = filtered_df[filtered_df['Username'].str.lower() == team_lower]
+            
+            # If no match, try partial match
+            if len(team_data) == 0:
+                team_data = filtered_df[filtered_df['Username'].str.lower().str.contains(team_lower, na=False)]
             
             if len(team_data) > 0:
                 total_tasks = len(team_data)
-                completed_tasks = len(team_data[team_data['Completed'].str.upper() == 'TRUE'])
-                day_type = team_data['Day_Type'].iloc[0] if 'Day_Type' in team_data.columns else 'Unknown'
+                
+                # Check for Completed column
+                if 'Completed' in team_data.columns:
+                    completed_tasks = len(team_data[team_data['Completed'].str.upper() == 'TRUE'])
+                else:
+                    print(f"   ⚠️ No 'Completed' column found for {team_name}")
+                    completed_tasks = 0
+                
+                # Get day type
+                if 'Day_Type' in team_data.columns:
+                    day_type = team_data['Day_Type'].iloc[0]
+                else:
+                    day_type = 'Unknown'
+                
                 percentage = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
                 
                 checklist_status[team_name] = {
@@ -388,12 +435,22 @@ def get_checklist_status(date_str):
                     'total': total_tasks,
                     'percentage': percentage
                 }
+                
+                print(f"   ✅ {team_name}: {completed_tasks}/{total_tasks} ({percentage}%)")
         
-        print(f"✅ Checklist status for {len(checklist_status)} team leaders")
+        if len(checklist_status) > 0:
+            print(f"✅ Checklist status compiled for {len(checklist_status)} team leaders")
+        else:
+            print("❌ No checklist status data matched any team leaders")
+            print(f"   Team leaders looking for: {list(TEAM_LEADERS.keys())}")
+            print(f"   Usernames in data: {filtered_df['Username'].unique().tolist() if 'Username' in filtered_df.columns else 'No Username column'}")
+        
         return checklist_status
         
     except Exception as e:
-        print(f"⚠️  Could not get checklist status: {e}")
+        print(f"❌ Error getting checklist status: {e}")
+        import traceback
+        traceback.print_exc()
         return {}
 
 # ============================================

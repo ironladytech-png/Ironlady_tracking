@@ -145,17 +145,36 @@ def parse_team_leader_sheet(worksheet, date_str):
         
         # Read until we hit another date or empty rows
         rm_data = []
+        seen_rms = set()  # Track RMs we've already added to prevent duplicates
+        
         for idx in range(data_start_idx, len(all_values)):
             row = all_values[idx]
             
-            # Stop if we hit another date or empty RM name
+            # Stop if we hit an empty row
             if not row or len(row) < 2:
                 break
             
             rm_name = str(row[1]).strip() if len(row) > 1 else ''
             
-            if not rm_name or rm_name == '' or 'Nov' in rm_name or 'Jan' in rm_name:
+            # Stop conditions:
+            # 1. Empty RM name
+            # 2. RM name contains date indicators
+            # 3. RM name is same as team name (indicates section header)
+            # 4. RM name is "RM Name" (indicates header row)
+            # 5. We've already seen this RM (duplicate)
+            if (not rm_name or 
+                rm_name == '' or 
+                'Nov' in rm_name or 
+                'Jan' in rm_name or
+                'Dec' in rm_name or
+                rm_name == 'RM Name' or
+                'Rising Stars' in rm_name or
+                'High Flyers' in rm_name or
+                'Goal Getters' in rm_name or
+                rm_name in seen_rms):
                 break
+            
+            seen_rms.add(rm_name)
             
             # Parse the metrics (columns: RM Name, Target, Achieved, Target, Achieved, ...)
             # WA Audit: cols 2,3
@@ -308,11 +327,80 @@ def aggregate_team_summary(team_data):
     
     return summary
 
+def get_checklist_status(date_str):
+    """Get checklist completion status for each team leader"""
+    try:
+        client = get_sheets_client()
+        if not client:
+            return {}
+        
+        spreadsheet = client.open_by_key(SHEET_ID)
+        
+        try:
+            worksheet = spreadsheet.worksheet('Checklists')
+            print("✅ Found Checklists worksheet")
+        except gspread.exceptions.WorksheetNotFound:
+            print("⚠️  Checklists worksheet not found")
+            return {}
+        
+        all_data = worksheet.get_all_values()
+        
+        if len(all_data) <= 1:
+            print("⚠️  No checklist data")
+            return {}
+        
+        # Create DataFrame
+        df = pd.DataFrame(all_data[1:], columns=all_data[0])
+        
+        # Filter for date
+        df = df[df['Date'] == date_str].copy()
+        
+        if len(df) == 0:
+            print(f"⚠️  No checklist data for {date_str}")
+            return {}
+        
+        # Aggregate by team leader
+        checklist_status = {}
+        
+        # Map worksheet names to team leader names
+        worksheet_to_display = {
+            'ghazala': 'Ghazala',
+            'afreen': 'Afreen',
+            'soumya': 'Soumya',
+            'sweksha': 'Sweksha',
+            'nj - t&e': 'NJ - T&E'
+        }
+        
+        for team_name in TEAM_LEADERS.keys():
+            # Look for this team in the checklist data
+            team_lower = team_name.lower()
+            team_data = df[df['Username'].str.lower() == team_lower]
+            
+            if len(team_data) > 0:
+                total_tasks = len(team_data)
+                completed_tasks = len(team_data[team_data['Completed'].str.upper() == 'TRUE'])
+                day_type = team_data['Day_Type'].iloc[0] if 'Day_Type' in team_data.columns else 'Unknown'
+                percentage = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
+                
+                checklist_status[team_name] = {
+                    'day_type': day_type,
+                    'completed': completed_tasks,
+                    'total': total_tasks,
+                    'percentage': percentage
+                }
+        
+        print(f"✅ Checklist status for {len(checklist_status)} team leaders")
+        return checklist_status
+        
+    except Exception as e:
+        print(f"⚠️  Could not get checklist status: {e}")
+        return {}
+
 # ============================================
 # EMAIL FUNCTIONS
 # ============================================
 
-def create_email_html(team_summary, team_data):
+def create_email_html(team_summary, team_data, checklist_status={}):
     """Create HTML email with team and RM-level details"""
     
     # Calculate overall totals
@@ -385,6 +473,69 @@ def create_email_html(team_summary, team_data):
         
         rm_details_html += "</table>"
     
+    # Checklist status section
+    checklist_html = ""
+    if checklist_status:
+        checklist_html = f"""
+        <h2 class="section-title">✅ Daily Checklist Status</h2>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr style="background: {IRONLADY_COLORS['secondary']}; color: white;">
+                <th style="padding: 12px; text-align: left;">Team Leader</th>
+                <th style="padding: 12px; text-align: center;">Day Type</th>
+                <th style="padding: 12px; text-align: center;">Completed</th>
+                <th style="padding: 12px; text-align: center;">Total Tasks</th>
+                <th style="padding: 12px; text-align: center;">Progress</th>
+                <th style="padding: 12px; text-align: center;">Status</th>
+            </tr>
+        """
+        
+        for team_name, display_name in TEAM_LEADERS.items():
+            if team_name in checklist_status:
+                status = checklist_status[team_name]
+                percentage = status['percentage']
+                
+                if percentage == 100:
+                    status_icon = '✅'
+                    status_text = 'Complete'
+                    status_color = IRONLADY_COLORS['success']
+                elif percentage >= 50:
+                    status_icon = '⚠️'
+                    status_text = 'In Progress'
+                    status_color = IRONLADY_COLORS['primary']
+                else:
+                    status_icon = '❌'
+                    status_text = 'Not Started'
+                    status_color = '#dc3545'
+                
+                checklist_html += f"""
+                <tr>
+                    <td style="padding: 12px;"><strong>{display_name}</strong></td>
+                    <td style="padding: 12px; text-align: center;">{status['day_type']}</td>
+                    <td style="padding: 12px; text-align: center; font-weight: 700;">{status['completed']}</td>
+                    <td style="padding: 12px; text-align: center;">{status['total']}</td>
+                    <td style="padding: 12px; text-align: center;">
+                        <div style="background: #e0e0e0; height: 20px; border-radius: 10px; overflow: hidden; display: inline-block; width: 100px;">
+                            <div style="background: {status_color}; height: 100%; width: {percentage}%;"></div>
+                        </div>
+                        <span style="margin-left: 10px;">{percentage}%</span>
+                    </td>
+                    <td style="padding: 12px; text-align: center;">
+                        {status_icon} <span style="color: {status_color}; font-weight: 700;">{status_text}</span>
+                    </td>
+                </tr>
+                """
+            else:
+                checklist_html += f"""
+                <tr>
+                    <td style="padding: 12px;"><strong>{display_name}</strong></td>
+                    <td style="padding: 12px; text-align: center;" colspan="5">
+                        <span style="color: #999;">No checklist data</span>
+                    </td>
+                </tr>
+                """
+        
+        checklist_html += "</table>"
+    
     # Complete HTML
     html = f"""
     <html>
@@ -435,6 +586,8 @@ def create_email_html(team_summary, team_data):
                 <h2 class="section-title">📋 RM-Level Details</h2>
                 <p style="font-size: 0.9rem; color: #666;"><em>T/A = Target / Achieved</em></p>
                 {rm_details_html}
+                
+                {checklist_html}
                 
                 <h2 class="section-title">💡 Key Insights</h2>
                 <div class="metric">
@@ -521,10 +674,23 @@ def main():
         print(f"  RMs: {summary['total_rms']}")
         print(f"  Registrations: {summary['registrations_achieved']}/{summary['registrations_target']} ({summary['conversion_rate']}%)")
     
+    # Get checklist status
+    print("\n" + "="*60)
+    print("FETCHING CHECKLIST STATUS")
+    print("="*60)
+    
+    checklist_status = get_checklist_status(today)
+    if checklist_status:
+        print(f"✅ Checklist data: {len(checklist_status)} team leaders")
+        for team_name, status in checklist_status.items():
+            print(f"  → {team_name}: {status['completed']}/{status['total']} ({status['percentage']}%) - {status['day_type']}")
+    else:
+        print("ℹ️  No checklist data")
+    
     # Create and send email
     if not RECIPIENT_EMAILS:
         print("\n⚠️  No recipients configured - generating email preview only")
-        html_body = create_email_html(team_summary, team_data)
+        html_body = create_email_html(team_summary, team_data, checklist_status)
         
         with open('email_preview.html', 'w') as f:
             f.write(html_body)
@@ -536,7 +702,7 @@ def main():
     print("="*60)
     
     subject = f"Iron Lady Daily Report - {datetime.now().strftime('%B %d, %Y')}"
-    html_body = create_email_html(team_summary, team_data)
+    html_body = create_email_html(team_summary, team_data, checklist_status)
     
     success, message = send_email(RECIPIENT_EMAILS, subject, html_body)
     

@@ -1,5 +1,6 @@
 """
 IRON LADY - Email Script for Multiple Team Leader Worksheets
+FIXED VERSION - Improved checklist status detection and multiple email recipients
 Reads from separate worksheets: Ghazala, Afreen, Soumya, Sweksha, NJ - T&E
 Handles Target/Achieved column pairs
 Shows targets even when achieved values are empty
@@ -26,19 +27,40 @@ EMAIL_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', '').strip()
 EMAIL_SMTP_SERVER = 'smtp.gmail.com'
 EMAIL_SMTP_PORT = 587
 
-# Recipients
+# Recipients - IMPROVED HANDLING
 CEO_EMAIL = os.getenv('CEO_EMAIL', '').strip()
 AUTO_MAIL = os.getenv('AUTO_MAIL', '').strip()
 
-# Clean recipients
-recipient_list = []
-for email_var in [CEO_EMAIL, AUTO_MAIL]:
-    if email_var:
-        cleaned = email_var.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
-        emails = [e.strip() for e in cleaned.replace(',', ' ').split() if e.strip() and '@' in e]
-        recipient_list.extend(emails)
+# Clean and parse recipients - handle multiple formats
+def parse_email_recipients():
+    """Parse email recipients from environment variables"""
+    recipient_list = []
+    
+    # Combine all email sources
+    all_emails = f"{CEO_EMAIL} {AUTO_MAIL}"
+    
+    # Remove all types of newlines and split by common separators
+    all_emails = all_emails.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
+    all_emails = all_emails.replace(',', ' ').replace(';', ' ')
+    
+    # Split and clean
+    for email in all_emails.split():
+        email = email.strip()
+        # Validate email format
+        if email and '@' in email and '.' in email.split('@')[1]:
+            recipient_list.append(email)
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_recipients = []
+    for email in recipient_list:
+        if email.lower() not in seen:
+            seen.add(email.lower())
+            unique_recipients.append(email)
+    
+    return unique_recipients
 
-RECIPIENT_EMAILS = list(set([e for e in recipient_list if e and '@' in e and '.' in e]))
+RECIPIENT_EMAILS = parse_email_recipients()
 
 # Google Sheets config
 SHEET_ID = os.getenv('GOOGLE_SHEET_ID', '').strip()
@@ -52,7 +74,7 @@ IRONLADY_COLORS = {
     'success': '#2A9D8F',
 }
 
-# Team Leader worksheets mapping
+# Team Leader worksheets mapping - UPDATED
 TEAM_LEADERS = {
     'Ghazala': 'Ghazala - Rising Stars',
     'Afreen': 'Afreen - High Flyers',
@@ -327,7 +349,7 @@ def aggregate_team_summary(team_data):
     return summary
 
 def get_checklist_status(date_str):
-    """Get checklist completion status for each team leader"""
+    """Get checklist completion status for each team leader - IMPROVED VERSION"""
     try:
         client = get_sheets_client()
         if not client:
@@ -336,14 +358,34 @@ def get_checklist_status(date_str):
         
         spreadsheet = client.open_by_key(SHEET_ID)
         
+        # Try to find the Checklists worksheet
         try:
             worksheet = spreadsheet.worksheet('Checklists')
             print("✅ Found Checklists worksheet")
         except gspread.exceptions.WorksheetNotFound:
-            print("⚠️  Checklists worksheet not found")
-            print(f"   Available worksheets: {[ws.title for ws in spreadsheet.worksheets()]}")
-            return {}
+            print("⚠️  'Checklists' worksheet not found")
+            
+            # Try alternative names
+            all_sheets = [ws.title for ws in spreadsheet.worksheets()]
+            print(f"   Available worksheets: {all_sheets}")
+            
+            # Look for worksheet with 'checklist' in name (case insensitive)
+            checklist_sheet = None
+            for sheet_name in all_sheets:
+                if 'checklist' in sheet_name.lower():
+                    try:
+                        worksheet = spreadsheet.worksheet(sheet_name)
+                        print(f"✅ Found alternative checklist worksheet: {sheet_name}")
+                        checklist_sheet = worksheet
+                        break
+                    except:
+                        continue
+            
+            if not checklist_sheet:
+                print("❌ No checklist worksheet found")
+                return {}
         
+        # Get all data
         all_data = worksheet.get_all_values()
         print(f"   Retrieved {len(all_data)} rows from Checklists")
         
@@ -359,36 +401,62 @@ def get_checklist_status(date_str):
         df = pd.DataFrame(all_data[1:], columns=headers)
         print(f"   Total checklist entries: {len(df)}")
         
-        # Check what's in the DataFrame
-        if 'Username' in df.columns:
-            unique_users = df['Username'].unique()
-            print(f"   Users in checklist: {unique_users}")
+        # Check what columns we have
+        print(f"   Available columns: {df.columns.tolist()}")
+        
+        # Identify the username/name column
+        username_col = None
+        for col in ['Username', 'username', 'User', 'user', 'Name', 'name', 'Team_Leader', 'team_leader', 'TL', 'tl']:
+            if col in df.columns:
+                username_col = col
+                print(f"   Using '{username_col}' as username column")
+                break
+        
+        if not username_col:
+            print("❌ Could not find username column in checklist data")
+            return {}
+        
+        # Identify the completed column
+        completed_col = None
+        for col in ['Completed', 'completed', 'Status', 'status', 'Done', 'done', 'Complete', 'complete']:
+            if col in df.columns:
+                completed_col = col
+                print(f"   Using '{completed_col}' as completed column")
+                break
+        
+        # Check unique users
+        unique_users = df[username_col].unique()
+        print(f"   Users in checklist: {unique_users}")
         
         # Try different date matching strategies
         date_formats = [
             date_str,  # 2025-11-13
             datetime.strptime(date_str, '%Y-%m-%d').strftime('%b %d'),  # Nov 13
             datetime.strptime(date_str, '%Y-%m-%d').strftime('%B %d, %Y'),  # November 13, 2025
+            datetime.strptime(date_str, '%Y-%m-%d').strftime('%m/%d/%Y'),  # 11/13/2025
+            datetime.strptime(date_str, '%Y-%m-%d').strftime('%d/%m/%Y'),  # 13/11/2025
         ]
         
         filtered_df = pd.DataFrame()
+        matched_date_format = None
         
         # Try to filter by date if Date column exists
-        if 'Date' in df.columns:
+        date_col = None
+        for col in ['Date', 'date', 'Timestamp', 'timestamp', 'Day', 'day']:
+            if col in df.columns:
+                date_col = col
+                print(f"   Using '{date_col}' as date column")
+                break
+        
+        if date_col:
             for date_format in date_formats:
-                filtered_df = df[df['Date'] == date_format].copy()
+                filtered_df = df[df[date_col].str.contains(date_format, na=False, case=False)].copy()
                 if len(filtered_df) > 0:
+                    matched_date_format = date_format
                     print(f"   ✅ Found {len(filtered_df)} entries matching date: {date_format}")
                     break
         
-        # If no Date column or no matches, try Timestamp column
-        if len(filtered_df) == 0 and 'Timestamp' in df.columns:
-            print("   Trying to match by Timestamp...")
-            filtered_df = df[df['Timestamp'].str.contains(date_str, na=False)].copy()
-            if len(filtered_df) > 0:
-                print(f"   ✅ Found {len(filtered_df)} entries by timestamp")
-        
-        # If still no matches, just use all data for today (most recent)
+        # If no matches, use all data (assume it's today's data)
         if len(filtered_df) == 0:
             print(f"   ⚠️ No date-specific data found, using all checklist data")
             filtered_df = df.copy()
@@ -397,35 +465,58 @@ def get_checklist_status(date_str):
             print(f"   ❌ No checklist data after filtering")
             return {}
         
-        # Aggregate by team leader
+        # Aggregate by team leader with improved matching
         checklist_status = {}
         
-        # Try different username formats
         for team_name in TEAM_LEADERS.keys():
             team_lower = team_name.lower()
             
-            # Try exact match first
-            team_data = filtered_df[filtered_df['Username'].str.lower() == team_lower]
+            # Try multiple matching strategies
+            team_data = pd.DataFrame()
             
-            # If no match, try partial match
+            # Strategy 1: Exact match (case insensitive)
+            team_data = filtered_df[filtered_df[username_col].str.lower() == team_lower]
+            
+            # Strategy 2: Partial match (contains)
             if len(team_data) == 0:
-                team_data = filtered_df[filtered_df['Username'].str.lower().str.contains(team_lower, na=False)]
+                team_data = filtered_df[filtered_df[username_col].str.lower().str.contains(team_lower, na=False)]
+            
+            # Strategy 3: Match first name only
+            if len(team_data) == 0:
+                for user in unique_users:
+                    if team_lower in str(user).lower():
+                        team_data = filtered_df[filtered_df[username_col] == user]
+                        print(f"   Matched '{team_name}' to user '{user}'")
+                        break
             
             if len(team_data) > 0:
                 total_tasks = len(team_data)
                 
-                # Check for Completed column
-                if 'Completed' in team_data.columns:
-                    completed_tasks = len(team_data[team_data['Completed'].str.upper() == 'TRUE'])
+                # Check for completed tasks
+                completed_tasks = 0
+                if completed_col:
+                    # Try different ways to identify completed tasks
+                    completed_tasks = len(team_data[
+                        (team_data[completed_col].str.upper() == 'TRUE') |
+                        (team_data[completed_col].str.upper() == 'YES') |
+                        (team_data[completed_col].str.upper() == 'Y') |
+                        (team_data[completed_col] == '1') |
+                        (team_data[completed_col].str.upper() == 'COMPLETE') |
+                        (team_data[completed_col].str.upper() == 'DONE')
+                    ])
                 else:
-                    print(f"   ⚠️ No 'Completed' column found for {team_name}")
-                    completed_tasks = 0
+                    print(f"   ⚠️ No completed column found, assuming 0 completed")
                 
-                # Get day type
+                # Get day type if available
+                day_type = 'Unknown'
                 if 'Day_Type' in team_data.columns:
                     day_type = team_data['Day_Type'].iloc[0]
-                else:
-                    day_type = 'Unknown'
+                elif 'day_type' in team_data.columns:
+                    day_type = team_data['day_type'].iloc[0]
+                elif 'DayType' in team_data.columns:
+                    day_type = team_data['DayType'].iloc[0]
+                elif 'Type' in team_data.columns:
+                    day_type = team_data['Type'].iloc[0]
                 
                 percentage = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
                 
@@ -436,14 +527,16 @@ def get_checklist_status(date_str):
                     'percentage': percentage
                 }
                 
-                print(f"   ✅ {team_name}: {completed_tasks}/{total_tasks} ({percentage}%)")
+                print(f"   ✅ {team_name}: {completed_tasks}/{total_tasks} ({percentage}%) - {day_type}")
+            else:
+                print(f"   ⚠️ No checklist data found for {team_name}")
         
         if len(checklist_status) > 0:
             print(f"✅ Checklist status compiled for {len(checklist_status)} team leaders")
         else:
             print("❌ No checklist status data matched any team leaders")
             print(f"   Team leaders looking for: {list(TEAM_LEADERS.keys())}")
-            print(f"   Usernames in data: {filtered_df['Username'].unique().tolist() if 'Username' in filtered_df.columns else 'No Username column'}")
+            print(f"   Usernames in data: {unique_users.tolist()}")
         
         return checklist_status
         
@@ -530,9 +623,9 @@ def create_email_html(team_summary, team_data, checklist_status={}):
         
         rm_details_html += "</table>"
     
-    # Checklist status section
+    # Checklist status section - IMPROVED DISPLAY
     checklist_html = ""
-    if checklist_status:
+    if checklist_status and len(checklist_status) > 0:
         checklist_html = f"""
         <h2 class="section-title">✅ Daily Checklist Status</h2>
         <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
@@ -592,6 +685,17 @@ def create_email_html(team_summary, team_data, checklist_status={}):
                 """
         
         checklist_html += "</table>"
+    else:
+        # Show message that checklist data is not available
+        checklist_html = f"""
+        <h2 class="section-title">✅ Daily Checklist Status</h2>
+        <div style="background: {IRONLADY_COLORS['accent']}; padding: 20px; margin: 15px 0; border-left: 5px solid {IRONLADY_COLORS['primary']}; border-radius: 5px;">
+            <p style="margin: 0; color: #666;">
+                <strong>ℹ️ Checklist data not available</strong><br/>
+                <small>Please ensure the 'Checklists' worksheet exists and contains data for today's date.</small>
+            </p>
+        </div>
+        """
     
     # Complete HTML
     html = f"""
@@ -663,7 +767,7 @@ def create_email_html(team_summary, team_data, checklist_status={}):
     return html
 
 def send_email(recipients, subject, html_body):
-    """Send email"""
+    """Send email to multiple recipients"""
     try:
         msg = MIMEMultipart('alternative')
         msg['From'] = EMAIL_SENDER
@@ -687,7 +791,7 @@ def send_email(recipients, subject, html_body):
 # ============================================
 
 def main():
-    print("🚀 Iron Lady Email Automation - Multi-Sheet Version")
+    print("🚀 Iron Lady Email Automation - FIXED VERSION")
     print(f"📅 {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
     print("\n" + "="*60)
     print("CONFIGURATION CHECK")
@@ -696,8 +800,13 @@ def main():
     print(f"Gmail: {'✅' if EMAIL_SENDER else '❌'} {EMAIL_SENDER if EMAIL_SENDER else 'Not set'}")
     print(f"Password: {'✅' if EMAIL_PASSWORD else '❌'}")
     print(f"Recipients: {'✅' if RECIPIENT_EMAILS else '❌'} {len(RECIPIENT_EMAILS)} email(s)")
-    for email in RECIPIENT_EMAILS:
-        print(f"  → {email}")
+    if RECIPIENT_EMAILS:
+        for email in RECIPIENT_EMAILS:
+            print(f"  → {email}")
+    else:
+        print("  ⚠️  No recipients configured")
+        print("  Set CEO_EMAIL and/or AUTO_MAIL environment variables")
+        print("  Format: single email or multiple emails separated by commas/spaces/newlines")
     print(f"Sheet ID: {'✅' if SHEET_ID else '❌'}")
     print(f"Credentials: {'✅' if CREDENTIALS_JSON else '❌'}")
     
@@ -731,18 +840,18 @@ def main():
         print(f"  RMs: {summary['total_rms']}")
         print(f"  Registrations: {summary['registrations_achieved']}/{summary['registrations_target']} ({summary['conversion_rate']}%)")
     
-    # Get checklist status
+    # Get checklist status with improved error handling
     print("\n" + "="*60)
     print("FETCHING CHECKLIST STATUS")
     print("="*60)
     
     checklist_status = get_checklist_status(today)
-    if checklist_status:
+    if checklist_status and len(checklist_status) > 0:
         print(f"✅ Checklist data: {len(checklist_status)} team leaders")
         for team_name, status in checklist_status.items():
             print(f"  → {team_name}: {status['completed']}/{status['total']} ({status['percentage']}%) - {status['day_type']}")
     else:
-        print("ℹ️  No checklist data")
+        print("ℹ️  No checklist data found (this section will show as 'not available' in email)")
     
     # Create and send email
     if not RECIPIENT_EMAILS:

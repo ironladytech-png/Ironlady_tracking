@@ -1,7 +1,12 @@
 """
-IRON LADY - Email Script for Google Sheets
-Properly reads structured data from Google Sheets
-Works with ironlady_sheets_complete.py
+IRON LADY - FIXED Email Script for Google Sheets
+This is the corrected version with proper worksheet and column names
+
+CHANGES FROM ORIGINAL:
+1. Line 122: Changed 'Metrics' → 'DailyMetrics'
+2. Line 137: Fixed column names (removed '_Achieved' suffix)
+3. Line 148: Fixed aggregation dictionary column names
+4. Added better error handling and debug output
 """
 
 import pandas as pd
@@ -80,60 +85,93 @@ def get_sheets_client():
         )
         
         client = gspread.authorize(credentials)
+        print("✅ Google Sheets client authorized")
         return client
     except Exception as e:
         print(f"❌ Error creating client: {e}")
         return None
 
 def get_metrics_data(date_str):
-    """Get performance metrics from Metrics sheet"""
+    """Get performance metrics from DailyMetrics sheet (FIXED VERSION)"""
     try:
         client = get_sheets_client()
         if not client:
+            print("❌ Could not get sheets client")
             return pd.DataFrame()
         
-        spreadsheet = client.open_by_key(SHEET_ID)
-        worksheet = spreadsheet.worksheet('Metrics')
+        try:
+            spreadsheet = client.open_by_key(SHEET_ID)
+            print(f"✅ Opened spreadsheet: {spreadsheet.title}")
+        except Exception as e:
+            print(f"❌ Could not open spreadsheet: {e}")
+            return pd.DataFrame()
+        
+        # ✅ FIX #1: Changed from 'Metrics' to 'DailyMetrics'
+        try:
+            worksheet = spreadsheet.worksheet('DailyMetrics')
+            print("✅ Found DailyMetrics worksheet")
+        except gspread.exceptions.WorksheetNotFound:
+            print("❌ DailyMetrics worksheet not found!")
+            print("Available worksheets:")
+            for ws in spreadsheet.worksheets():
+                print(f"   - {ws.title}")
+            return pd.DataFrame()
+        
         all_data = worksheet.get_all_values()
+        print(f"✅ Retrieved {len(all_data)} rows (including header)")
         
         if len(all_data) <= 1:
+            print("❌ No data rows in worksheet")
             return pd.DataFrame()
         
         # Create DataFrame
         df = pd.DataFrame(all_data[1:], columns=all_data[0])
+        print(f"✅ Created DataFrame with columns: {df.columns.tolist()}")
+        
+        # Show unique dates for debugging
+        if 'Date' in df.columns:
+            unique_dates = df['Date'].unique()
+            print(f"   Available dates in sheet: {sorted([d for d in unique_dates if d])}")
         
         # Filter for date
         df = df[df['Date'] == date_str].copy()
+        print(f"✅ Filtered for date {date_str}: {len(df)} rows found")
         
         if len(df) == 0:
+            print(f"❌ No data found for date: {date_str}")
             return pd.DataFrame()
         
-        # Convert numeric columns
-        numeric_cols = ['WA_Audit_Achieved', 'Call_Audit_Achieved', 'Mocks_Achieved', 
-                       'SL_Calls_Achieved', 'Followups_Achieved', 'Pitches_Achieved', 'Current_MC_Achieved']
+        # ✅ FIX #2: Changed column names (removed '_Achieved' suffix)
+        numeric_cols = ['WA_Audit', 'Call_Audit', 'Mocks', 
+                       'SL_Calls', 'Pitches', 'Registrations', 'Current_MC']
         
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+            else:
+                print(f"⚠️  Warning: Column '{col}' not found in data")
         
-        # Aggregate by username
+        print("✅ Converted numeric columns")
+        
+        # ✅ FIX #3: Changed aggregation dictionary column names
         agg_dict = {
             'RM_Name': 'count',  # Count RMs
-            'WA_Audit_Achieved': 'sum',
-            'Call_Audit_Achieved': 'sum',
-            'Mocks_Achieved': 'sum',
-            'SL_Calls_Achieved': 'sum',
-            'Followups_Achieved': 'sum',
-            'Pitches_Achieved': 'sum',
-            'Current_MC_Achieved': 'sum'
+            'WA_Audit': 'sum',
+            'Call_Audit': 'sum',
+            'Mocks': 'sum',
+            'SL_Calls': 'sum',
+            'Pitches': 'sum',
+            'Registrations': 'sum',
+            'Current_MC': 'sum'
         }
         
         grouped = df.groupby('Username').agg(agg_dict).reset_index()
+        print(f"✅ Aggregated data for {len(grouped)} users")
         
         # Rename columns
         grouped.columns = ['Username', 'Total_RMs', 'Total_WA_Audit', 'Total_Call_Audit',
-                          'Total_Mocks', 'Total_SL_Calls', 'Total_Registrations', 
-                          'Total_Pitches', 'Total_Current_MC']
+                          'Total_Mocks', 'Total_SL_Calls', 'Total_Pitches',
+                          'Total_Registrations', 'Total_Current_MC']
         
         # Add team leader names
         grouped['Team_Leader'] = grouped['Username'].map(USERNAME_TO_NAME)
@@ -144,6 +182,10 @@ def get_metrics_data(date_str):
             if row['Total_Pitches'] > 0 else 0.0,
             axis=1
         )
+        
+        print("✅ Final data prepared:")
+        for _, row in grouped.iterrows():
+            print(f"   {row['Team_Leader']}: {row['Total_Pitches']} pitches, {row['Total_Registrations']} regs ({row['Conversion_Rate']}%)")
         
         return grouped
         
@@ -161,10 +203,18 @@ def get_checklist_status(date_str):
             return {}
         
         spreadsheet = client.open_by_key(SHEET_ID)
-        worksheet = spreadsheet.worksheet('Checklists')
+        
+        try:
+            worksheet = spreadsheet.worksheet('Checklists')
+            print("✅ Found Checklists worksheet")
+        except gspread.exceptions.WorksheetNotFound:
+            print("⚠️  Checklists worksheet not found")
+            return {}
+        
         all_data = worksheet.get_all_values()
         
         if len(all_data) <= 1:
+            print("⚠️  No checklist data")
             return {}
         
         # Create DataFrame
@@ -174,6 +224,7 @@ def get_checklist_status(date_str):
         df = df[df['Date'] == date_str].copy()
         
         if len(df) == 0:
+            print(f"⚠️  No checklist data for {date_str}")
             return {}
         
         # Aggregate by username
@@ -193,6 +244,7 @@ def get_checklist_status(date_str):
                 'percentage': percentage
             }
         
+        print(f"✅ Checklist status for {len(checklist_status)} users")
         return checklist_status
         
     except Exception as e:
@@ -207,10 +259,18 @@ def get_upload_status(date_str):
             return {}
         
         spreadsheet = client.open_by_key(SHEET_ID)
-        worksheet = spreadsheet.worksheet('Uploads')
+        
+        try:
+            worksheet = spreadsheet.worksheet('Uploads')
+            print("✅ Found Uploads worksheet")
+        except gspread.exceptions.WorksheetNotFound:
+            print("⚠️  Uploads worksheet not found")
+            return {}
+        
         all_data = worksheet.get_all_values()
         
         if len(all_data) <= 1:
+            print("⚠️  No upload data")
             return {}
         
         # Create DataFrame
@@ -220,6 +280,7 @@ def get_upload_status(date_str):
         df = df[df['Date'] == date_str].copy()
         
         if len(df) == 0:
+            print(f"⚠️  No upload data for {date_str}")
             return {}
         
         # Aggregate by username
@@ -237,6 +298,7 @@ def get_upload_status(date_str):
                 'latest': latest
             }
         
+        print(f"✅ Upload status for {len(upload_status)} users")
         return upload_status
         
     except Exception as e:
@@ -517,7 +579,7 @@ def send_email(recipients, subject, html_body):
 # ============================================
 
 def main():
-    print("🚀 Iron Lady Email Automation")
+    print("🚀 Iron Lady Email Automation (FIXED VERSION)")
     print(f"📅 {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
     print("\n" + "="*60)
     print("CONFIGURATION CHECK")
@@ -540,15 +602,22 @@ def main():
     print("="*60)
     
     today = datetime.now().strftime('%Y-%m-%d')
+    print(f"Looking for data with date: {today}")
     
     # Get performance data
     df = get_metrics_data(today)
     
     if len(df) == 0:
         print(f"\n❌ No performance data for {today}")
+        print("\n💡 TROUBLESHOOTING:")
+        print("1. Check if DailyMetrics worksheet exists")
+        print("2. Check if data exists for today's date")
+        print("3. Verify column names: Username, Date, WA_Audit, Call_Audit, etc.")
+        print("4. Run diagnose_and_fix.py for detailed analysis")
         sys.exit(1)
     
-    print(f"✅ Performance data: {len(df)} team leaders")
+    print(f"\n✅ Performance data loaded successfully!")
+    print(f"   Found {len(df)} team leaders")
     for _, row in df.iterrows():
         print(f"  → {row['Team_Leader']}: {row['Total_Pitches']} pitches, {row['Total_Registrations']} regs ({row['Conversion_Rate']}%)")
     

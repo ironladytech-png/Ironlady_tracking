@@ -1,12 +1,8 @@
 """
-IRON LADY - FIXED Email Script for Google Sheets
-This is the corrected version with proper worksheet and column names
-
-CHANGES FROM ORIGINAL:
-1. Line 122: Changed 'Metrics' → 'DailyMetrics'
-2. Line 137: Fixed column names (removed '_Achieved' suffix)
-3. Line 148: Fixed aggregation dictionary column names
-4. Added better error handling and debug output
+IRON LADY - Email Script for Multiple Team Leader Worksheets
+Reads from separate worksheets: Ghazala, Afreen, Soumya, Sweksha, NJ - T&E
+Handles Target/Achieved column pairs
+Shows targets even when achieved values are empty
 """
 
 import pandas as pd
@@ -56,12 +52,13 @@ IRONLADY_COLORS = {
     'success': '#2A9D8F',
 }
 
-# User mapping
-USERNAME_TO_NAME = {
-    'ghazala': 'Ghazala - Rising Stars',
-    'megha': 'Megha - Winners',
-    'afreen': 'Afreen - High Flyers',
-    'soumya': 'Soumya - Goal Getters'
+# Team Leader worksheets mapping
+TEAM_LEADERS = {
+    'Ghazala': 'Ghazala - Rising Stars',
+    'Afreen': 'Afreen - High Flyers',
+    'Soumya': 'Soumya - Goal Getters',
+    'Sweksha': 'Sweksha - Team',
+    'NJ - T&E': 'NJ - Training & Excellence'
 }
 
 # ============================================
@@ -91,243 +88,243 @@ def get_sheets_client():
         print(f"❌ Error creating client: {e}")
         return None
 
-def get_metrics_data(date_str):
-    """Get performance metrics from DailyMetrics sheet (FIXED VERSION)"""
+def find_date_row(worksheet, target_date):
+    """Find the row that starts with the target date"""
     try:
-        client = get_sheets_client()
-        if not client:
-            print("❌ Could not get sheets client")
-            return pd.DataFrame()
+        all_values = worksheet.get_all_values()
         
-        try:
-            spreadsheet = client.open_by_key(SHEET_ID)
-            print(f"✅ Opened spreadsheet: {spreadsheet.title}")
-        except Exception as e:
-            print(f"❌ Could not open spreadsheet: {e}")
-            return pd.DataFrame()
+        # Look for date in first column
+        for idx, row in enumerate(all_values):
+            if row and len(row) > 0:
+                cell_value = str(row[0]).strip()
+                # Check if it matches the date format (Nov 13, Nov 12, etc.)
+                if target_date in cell_value or cell_value == target_date:
+                    return idx
         
-        # ✅ FIX #1: Changed from 'Metrics' to 'DailyMetrics'
-        try:
-            worksheet = spreadsheet.worksheet('DailyMetrics')
-            print("✅ Found DailyMetrics worksheet")
-        except gspread.exceptions.WorksheetNotFound:
-            print("❌ DailyMetrics worksheet not found!")
-            print("Available worksheets:")
-            for ws in spreadsheet.worksheets():
-                print(f"   - {ws.title}")
-            return pd.DataFrame()
+        return None
+    except Exception as e:
+        print(f"⚠️  Error finding date row: {e}")
+        return None
+
+def parse_team_leader_sheet(worksheet, date_str):
+    """
+    Parse a team leader worksheet with structure:
+    Date | Team Name | WA Audit (Target/Achieved) | Call Audit | Mocks | SL calls | Follow ups Registrations
+           RM Name   | Target | Achieved | Target | Achieved | ...
+    """
+    try:
+        all_values = worksheet.get_all_values()
         
-        all_data = worksheet.get_all_values()
-        print(f"✅ Retrieved {len(all_data)} rows (including header)")
+        if len(all_values) < 3:
+            print(f"⚠️  Sheet too small: {len(all_values)} rows")
+            return []
         
-        if len(all_data) <= 1:
-            print("❌ No data rows in worksheet")
-            return pd.DataFrame()
+        # Find the date
+        date_simple = datetime.strptime(date_str, '%Y-%m-%d').strftime('%b %d').lstrip('0')
+        print(f"   Looking for date: {date_simple} or {date_str}")
         
-        # Create DataFrame
-        df = pd.DataFrame(all_data[1:], columns=all_data[0])
-        print(f"✅ Created DataFrame with columns: {df.columns.tolist()}")
+        date_row_idx = None
+        for idx, row in enumerate(all_values):
+            if row and len(row) > 0:
+                cell = str(row[0]).strip()
+                if date_simple in cell or date_str in cell:
+                    date_row_idx = idx
+                    print(f"   Found date at row {idx}")
+                    break
         
-        # Show unique dates for debugging
-        if 'Date' in df.columns:
-            unique_dates = df['Date'].unique()
-            print(f"   Available dates in sheet: {sorted([d for d in unique_dates if d])}")
+        if date_row_idx is None:
+            print(f"   ❌ Date not found in sheet")
+            return []
         
-        # Filter for date
-        df = df[df['Date'] == date_str].copy()
-        print(f"✅ Filtered for date {date_str}: {len(df)} rows found")
+        # The header row should be right after the date
+        # Usually: row with "RM Name", "Target", "Achieved", etc.
+        header_row_idx = date_row_idx + 1
         
-        if len(df) == 0:
-            print(f"❌ No data found for date: {date_str}")
-            return pd.DataFrame()
+        # Data rows start after header
+        data_start_idx = header_row_idx + 1
         
-        # ✅ FIX #2: Changed column names (removed '_Achieved' suffix)
-        numeric_cols = ['WA_Audit', 'Call_Audit', 'Mocks', 
-                       'SL_Calls', 'Pitches', 'Registrations', 'Current_MC']
+        # Read until we hit another date or empty rows
+        rm_data = []
+        for idx in range(data_start_idx, len(all_values)):
+            row = all_values[idx]
+            
+            # Stop if we hit another date or empty RM name
+            if not row or len(row) < 2:
+                break
+            
+            rm_name = str(row[1]).strip() if len(row) > 1 else ''
+            
+            if not rm_name or rm_name == '' or 'Nov' in rm_name or 'Jan' in rm_name:
+                break
+            
+            # Parse the metrics (columns: RM Name, Target, Achieved, Target, Achieved, ...)
+            # WA Audit: cols 2,3
+            # Call Audit: cols 4,5
+            # Mocks: cols 6,7
+            # SL Calls: cols 8,9
+            # Follow ups Registrations: cols 10,11
+            
+            def safe_int(val):
+                try:
+                    return int(float(str(val).strip())) if val and str(val).strip() else 0
+                except:
+                    return 0
+            
+            wa_audit_target = safe_int(row[2]) if len(row) > 2 else 0
+            wa_audit_achieved = safe_int(row[3]) if len(row) > 3 else 0
+            
+            call_audit_target = safe_int(row[4]) if len(row) > 4 else 0
+            call_audit_achieved = safe_int(row[5]) if len(row) > 5 else 0
+            
+            mocks_target = safe_int(row[6]) if len(row) > 6 else 0
+            mocks_achieved = safe_int(row[7]) if len(row) > 7 else 0
+            
+            sl_calls_target = safe_int(row[8]) if len(row) > 8 else 0
+            sl_calls_achieved = safe_int(row[9]) if len(row) > 9 else 0
+            
+            registrations_target = safe_int(row[10]) if len(row) > 10 else 0
+            registrations_achieved = safe_int(row[11]) if len(row) > 11 else 0
+            
+            rm_data.append({
+                'rm_name': rm_name,
+                'wa_audit_target': wa_audit_target,
+                'wa_audit_achieved': wa_audit_achieved,
+                'call_audit_target': call_audit_target,
+                'call_audit_achieved': call_audit_achieved,
+                'mocks_target': mocks_target,
+                'mocks_achieved': mocks_achieved,
+                'sl_calls_target': sl_calls_target,
+                'sl_calls_achieved': sl_calls_achieved,
+                'registrations_target': registrations_target,
+                'registrations_achieved': registrations_achieved
+            })
         
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
-            else:
-                print(f"⚠️  Warning: Column '{col}' not found in data")
-        
-        print("✅ Converted numeric columns")
-        
-        # ✅ FIX #3: Changed aggregation dictionary column names
-        agg_dict = {
-            'RM_Name': 'count',  # Count RMs
-            'WA_Audit': 'sum',
-            'Call_Audit': 'sum',
-            'Mocks': 'sum',
-            'SL_Calls': 'sum',
-            'Pitches': 'sum',
-            'Registrations': 'sum',
-            'Current_MC': 'sum'
-        }
-        
-        grouped = df.groupby('Username').agg(agg_dict).reset_index()
-        print(f"✅ Aggregated data for {len(grouped)} users")
-        
-        # Rename columns
-        grouped.columns = ['Username', 'Total_RMs', 'Total_WA_Audit', 'Total_Call_Audit',
-                          'Total_Mocks', 'Total_SL_Calls', 'Total_Pitches',
-                          'Total_Registrations', 'Total_Current_MC']
-        
-        # Add team leader names
-        grouped['Team_Leader'] = grouped['Username'].map(USERNAME_TO_NAME)
-        
-        # Calculate conversion rate
-        grouped['Conversion_Rate'] = grouped.apply(
-            lambda row: round((row['Total_Registrations'] / row['Total_Pitches'] * 100), 1)
-            if row['Total_Pitches'] > 0 else 0.0,
-            axis=1
-        )
-        
-        print("✅ Final data prepared:")
-        for _, row in grouped.iterrows():
-            print(f"   {row['Team_Leader']}: {row['Total_Pitches']} pitches, {row['Total_Registrations']} regs ({row['Conversion_Rate']}%)")
-        
-        return grouped
+        print(f"   Found {len(rm_data)} RMs")
+        return rm_data
         
     except Exception as e:
-        print(f"❌ Error getting metrics: {e}")
+        print(f"   ❌ Error parsing sheet: {e}")
         import traceback
         traceback.print_exc()
-        return pd.DataFrame()
+        return []
 
-def get_checklist_status(date_str):
-    """Get checklist status from Checklists sheet"""
+def get_all_team_data(date_str):
+    """Get data from all team leader worksheets"""
     try:
         client = get_sheets_client()
         if not client:
             return {}
         
         spreadsheet = client.open_by_key(SHEET_ID)
+        print(f"✅ Opened spreadsheet: {spreadsheet.title}")
         
-        try:
-            worksheet = spreadsheet.worksheet('Checklists')
-            print("✅ Found Checklists worksheet")
-        except gspread.exceptions.WorksheetNotFound:
-            print("⚠️  Checklists worksheet not found")
-            return {}
+        # Get all worksheets
+        all_worksheets = spreadsheet.worksheets()
+        available_sheets = [ws.title for ws in all_worksheets]
+        print(f"✅ Available worksheets: {available_sheets}")
         
-        all_data = worksheet.get_all_values()
+        team_data = {}
         
-        if len(all_data) <= 1:
-            print("⚠️  No checklist data")
-            return {}
-        
-        # Create DataFrame
-        df = pd.DataFrame(all_data[1:], columns=all_data[0])
-        
-        # Filter for date
-        df = df[df['Date'] == date_str].copy()
-        
-        if len(df) == 0:
-            print(f"⚠️  No checklist data for {date_str}")
-            return {}
-        
-        # Aggregate by username
-        checklist_status = {}
-        
-        for username in df['Username'].unique():
-            user_data = df[df['Username'] == username]
-            total_tasks = len(user_data)
-            completed_tasks = len(user_data[user_data['Completed'].str.upper() == 'TRUE'])
-            day_type = user_data['Day_Type'].iloc[0] if len(user_data) > 0 else 'Unknown'
-            percentage = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0
+        for sheet_name, display_name in TEAM_LEADERS.items():
+            print(f"\n📋 Processing: {sheet_name}")
             
-            checklist_status[username] = {
-                'day_type': day_type,
-                'completed': completed_tasks,
-                'total': total_tasks,
-                'percentage': percentage
-            }
+            try:
+                worksheet = spreadsheet.worksheet(sheet_name)
+                rm_data = parse_team_leader_sheet(worksheet, date_str)
+                
+                if rm_data:
+                    team_data[sheet_name] = {
+                        'display_name': display_name,
+                        'rms': rm_data
+                    }
+                    print(f"   ✅ Loaded {len(rm_data)} RMs from {sheet_name}")
+                else:
+                    print(f"   ⚠️  No data found for {date_str}")
+                    # Still add with empty data to show targets
+                    team_data[sheet_name] = {
+                        'display_name': display_name,
+                        'rms': []
+                    }
+                    
+            except gspread.exceptions.WorksheetNotFound:
+                print(f"   ❌ Worksheet '{sheet_name}' not found")
+            except Exception as e:
+                print(f"   ❌ Error: {e}")
         
-        print(f"✅ Checklist status for {len(checklist_status)} users")
-        return checklist_status
+        return team_data
         
     except Exception as e:
-        print(f"⚠️  Could not get checklist status: {e}")
+        print(f"❌ Error getting team data: {e}")
+        import traceback
+        traceback.print_exc()
         return {}
 
-def get_upload_status(date_str):
-    """Get upload status from Uploads sheet"""
-    try:
-        client = get_sheets_client()
-        if not client:
-            return {}
+def aggregate_team_summary(team_data):
+    """Aggregate data across all teams"""
+    summary = {}
+    
+    for team_name, team_info in team_data.items():
+        rms = team_info['rms']
+        display_name = team_info['display_name']
         
-        spreadsheet = client.open_by_key(SHEET_ID)
+        total_rms = len(rms)
         
-        try:
-            worksheet = spreadsheet.worksheet('Uploads')
-            print("✅ Found Uploads worksheet")
-        except gspread.exceptions.WorksheetNotFound:
-            print("⚠️  Uploads worksheet not found")
-            return {}
+        # Calculate totals
+        wa_audit_target = sum(rm['wa_audit_target'] for rm in rms)
+        wa_audit_achieved = sum(rm['wa_audit_achieved'] for rm in rms)
         
-        all_data = worksheet.get_all_values()
+        call_audit_target = sum(rm['call_audit_target'] for rm in rms)
+        call_audit_achieved = sum(rm['call_audit_achieved'] for rm in rms)
         
-        if len(all_data) <= 1:
-            print("⚠️  No upload data")
-            return {}
+        mocks_target = sum(rm['mocks_target'] for rm in rms)
+        mocks_achieved = sum(rm['mocks_achieved'] for rm in rms)
         
-        # Create DataFrame
-        df = pd.DataFrame(all_data[1:], columns=all_data[0])
+        sl_calls_target = sum(rm['sl_calls_target'] for rm in rms)
+        sl_calls_achieved = sum(rm['sl_calls_achieved'] for rm in rms)
         
-        # Filter for date
-        df = df[df['Date'] == date_str].copy()
+        registrations_target = sum(rm['registrations_target'] for rm in rms)
+        registrations_achieved = sum(rm['registrations_achieved'] for rm in rms)
         
-        if len(df) == 0:
-            print(f"⚠️  No upload data for {date_str}")
-            return {}
+        # Calculate conversion rate
+        conversion_rate = 0.0
+        if registrations_target > 0:
+            conversion_rate = round((registrations_achieved / registrations_target * 100), 1)
         
-        # Aggregate by username
-        upload_status = {}
-        
-        for username in df['Username'].unique():
-            user_data = df[df['Username'] == username]
-            total_files = len(user_data)
-            categories = user_data['Category'].unique().tolist()
-            latest = user_data['Upload_Time'].max() if len(user_data) > 0 else 'Unknown'
-            
-            upload_status[username] = {
-                'total_files': total_files,
-                'categories': categories,
-                'latest': latest
-            }
-        
-        print(f"✅ Upload status for {len(upload_status)} users")
-        return upload_status
-        
-    except Exception as e:
-        print(f"⚠️  Could not get upload status: {e}")
-        return {}
+        summary[team_name] = {
+            'display_name': display_name,
+            'total_rms': total_rms,
+            'wa_audit_target': wa_audit_target,
+            'wa_audit_achieved': wa_audit_achieved,
+            'call_audit_target': call_audit_target,
+            'call_audit_achieved': call_audit_achieved,
+            'mocks_target': mocks_target,
+            'mocks_achieved': mocks_achieved,
+            'sl_calls_target': sl_calls_target,
+            'sl_calls_achieved': sl_calls_achieved,
+            'registrations_target': registrations_target,
+            'registrations_achieved': registrations_achieved,
+            'conversion_rate': conversion_rate
+        }
+    
+    return summary
 
 # ============================================
 # EMAIL FUNCTIONS
 # ============================================
 
-def create_email_html(df, checklist_status={}, upload_status={}):
-    """Create HTML email"""
+def create_email_html(team_summary, team_data):
+    """Create HTML email with team and RM-level details"""
     
-    # Calculate totals
-    total_rms = int(df['Total_RMs'].sum())
-    total_pitches = int(df['Total_Pitches'].sum())
-    total_registrations = int(df['Total_Registrations'].sum())
-    avg_conversion = round((total_registrations / total_pitches * 100), 1) if total_pitches > 0 else 0
+    # Calculate overall totals
+    total_rms = sum(t['total_rms'] for t in team_summary.values())
+    total_reg_target = sum(t['registrations_target'] for t in team_summary.values())
+    total_reg_achieved = sum(t['registrations_achieved'] for t in team_summary.values())
+    avg_conversion = round((total_reg_achieved / total_reg_target * 100), 1) if total_reg_target > 0 else 0
     
-    total_wa = int(df['Total_WA_Audit'].sum())
-    total_call = int(df['Total_Call_Audit'].sum())
-    total_mocks = int(df['Total_Mocks'].sum())
-    total_sl = int(df['Total_SL_Calls'].sum())
-    total_mc = int(df['Total_Current_MC'].sum())
-    
-    # Team performance table
-    table_rows = ""
-    for _, row in df.iterrows():
-        conv = row['Conversion_Rate']
+    # Team summary table
+    team_rows = ""
+    for team_name, data in team_summary.items():
+        conv = data['conversion_rate']
         if conv >= 15:
             conv_color = IRONLADY_COLORS['success']
             conv_icon = '✅'
@@ -338,145 +335,55 @@ def create_email_html(df, checklist_status={}, upload_status={}):
             conv_color = '#dc3545'
             conv_icon = '❌'
         
-        table_rows += f"""
+        team_rows += f"""
         <tr>
-            <td style="padding: 12px;">{row['Team_Leader']}</td>
-            <td style="padding: 12px; text-align: center;">{row['Total_RMs']}</td>
-            <td style="padding: 12px; text-align: center;">{row['Total_Pitches']}</td>
-            <td style="padding: 12px; text-align: center;">{row['Total_Registrations']}</td>
+            <td style="padding: 12px;"><strong>{data['display_name']}</strong></td>
+            <td style="padding: 12px; text-align: center;">{data['total_rms']}</td>
+            <td style="padding: 12px; text-align: center;">{data['registrations_target']}</td>
+            <td style="padding: 12px; text-align: center;">{data['registrations_achieved']}</td>
             <td style="padding: 12px; text-align: center;">
                 {conv_icon} <span style="color: {conv_color}; font-weight: 700;">{conv}%</span>
             </td>
         </tr>
         """
     
-    # Checklist section
-    checklist_html = ""
-    if checklist_status:
-        checklist_html = f"""
-        <h2 class="section-title">✅ Daily Checklist Status</h2>
-        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    # RM-level details for each team
+    rm_details_html = ""
+    for team_name, team_info in team_data.items():
+        display_name = team_info['display_name']
+        rms = team_info['rms']
+        
+        if not rms:
+            continue
+        
+        rm_details_html += f"""
+        <h3 style="color: {IRONLADY_COLORS['secondary']}; margin-top: 30px; padding: 10px; background: {IRONLADY_COLORS['accent']};">
+            {display_name} - RM Details
+        </h3>
+        <table style="width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 0.9rem;">
             <tr style="background: {IRONLADY_COLORS['secondary']}; color: white;">
-                <th style="padding: 12px; text-align: left;">Team Leader</th>
-                <th style="padding: 12px; text-align: center;">Day Type</th>
-                <th style="padding: 12px; text-align: center;">Completed</th>
-                <th style="padding: 12px; text-align: center;">Progress</th>
-                <th style="padding: 12px; text-align: center;">Status</th>
+                <th style="padding: 10px; text-align: left;">RM Name</th>
+                <th style="padding: 10px; text-align: center;">WA Audit<br/><small>T/A</small></th>
+                <th style="padding: 10px; text-align: center;">Call Audit<br/><small>T/A</small></th>
+                <th style="padding: 10px; text-align: center;">Mocks<br/><small>T/A</small></th>
+                <th style="padding: 10px; text-align: center;">SL Calls<br/><small>T/A</small></th>
+                <th style="padding: 10px; text-align: center;">Registrations<br/><small>T/A</small></th>
             </tr>
         """
         
-        for _, row in df.iterrows():
-            username = row['Username']
-            team_name = row['Team_Leader']
-            
-            if username in checklist_status:
-                status = checklist_status[username]
-                percentage = status['percentage']
-                
-                if percentage == 100:
-                    status_icon = '✅'
-                    status_text = 'Complete'
-                    status_color = IRONLADY_COLORS['success']
-                elif percentage >= 50:
-                    status_icon = '⚠️'
-                    status_text = 'In Progress'
-                    status_color = IRONLADY_COLORS['primary']
-                else:
-                    status_icon = '❌'
-                    status_text = 'Not Started'
-                    status_color = '#dc3545'
-                
-                checklist_html += f"""
-                <tr>
-                    <td style="padding: 12px;">{team_name}</td>
-                    <td style="padding: 12px; text-align: center;">{status['day_type']}</td>
-                    <td style="padding: 12px; text-align: center;">{status['completed']}/{status['total']}</td>
-                    <td style="padding: 12px; text-align: center;">
-                        <div style="background: #e0e0e0; height: 20px; border-radius: 10px; overflow: hidden;">
-                            <div style="background: {status_color}; height: 100%; width: {percentage}%;"></div>
-                        </div>
-                    </td>
-                    <td style="padding: 12px; text-align: center;">
-                        {status_icon} <span style="color: {status_color}; font-weight: 700;">{status_text}</span>
-                    </td>
-                </tr>
-                """
-            else:
-                checklist_html += f"""
-                <tr>
-                    <td style="padding: 12px;">{team_name}</td>
-                    <td style="padding: 12px; text-align: center;" colspan="4">
-                        <span style="color: #999;">No data</span>
-                    </td>
-                </tr>
-                """
-        
-        checklist_html += "</table>"
-    else:
-        checklist_html = f"""
-        <h2 class="section-title">✅ Daily Checklist Status</h2>
-        <div style="background: {IRONLADY_COLORS['accent']}; padding: 20px; margin: 20px 0;">
-            <p>ℹ️ No checklist data available for today.</p>
-        </div>
-        """
-    
-    # Upload section
-    upload_html = ""
-    if upload_status:
-        upload_html = f"""
-        <h2 class="section-title">📤 Document Upload Status</h2>
-        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-            <tr style="background: {IRONLADY_COLORS['secondary']}; color: white;">
-                <th style="padding: 12px; text-align: left;">Team Leader</th>
-                <th style="padding: 12px; text-align: center;">Total Files</th>
-                <th style="padding: 12px; text-align: left;">Categories</th>
-                <th style="padding: 12px; text-align: center;">Status</th>
+        for rm in rms:
+            rm_details_html += f"""
+            <tr>
+                <td style="padding: 10px;">{rm['rm_name']}</td>
+                <td style="padding: 10px; text-align: center;">{rm['wa_audit_target']}/{rm['wa_audit_achieved']}</td>
+                <td style="padding: 10px; text-align: center;">{rm['call_audit_target']}/{rm['call_audit_achieved']}</td>
+                <td style="padding: 10px; text-align: center;">{rm['mocks_target']}/{rm['mocks_achieved']}</td>
+                <td style="padding: 10px; text-align: center;">{rm['sl_calls_target']}/{rm['sl_calls_achieved']}</td>
+                <td style="padding: 10px; text-align: center;">{rm['registrations_target']}/{rm['registrations_achieved']}</td>
             </tr>
-        """
+            """
         
-        for _, row in df.iterrows():
-            username = row['Username']
-            team_name = row['Team_Leader']
-            
-            if username in upload_status:
-                status = upload_status[username]
-                total_files = status['total_files']
-                categories = ', '.join(status['categories'][:3])
-                if len(status['categories']) > 3:
-                    categories += f" (+{len(status['categories']) - 3} more)"
-                
-                status_icon = '✅' if total_files > 0 else '❌'
-                status_text = f'{total_files} uploaded' if total_files > 0 else 'No uploads'
-                status_color = IRONLADY_COLORS['success'] if total_files > 0 else '#dc3545'
-                
-                upload_html += f"""
-                <tr>
-                    <td style="padding: 12px;">{team_name}</td>
-                    <td style="padding: 12px; text-align: center; font-weight: 700;">{total_files}</td>
-                    <td style="padding: 12px;"><small>{categories}</small></td>
-                    <td style="padding: 12px; text-align: center;">
-                        {status_icon} <span style="color: {status_color}; font-weight: 700;">{status_text}</span>
-                    </td>
-                </tr>
-                """
-            else:
-                upload_html += f"""
-                <tr>
-                    <td style="padding: 12px;">{team_name}</td>
-                    <td style="padding: 12px; text-align: center;" colspan="3">
-                        <span style="color: #999;">No uploads</span>
-                    </td>
-                </tr>
-                """
-        
-        upload_html += "</table>"
-    else:
-        upload_html = f"""
-        <h2 class="section-title">📤 Document Upload Status</h2>
-        <div style="background: {IRONLADY_COLORS['accent']}; padding: 20px; margin: 20px 0;">
-            <p>ℹ️ No upload data available for today.</p>
-        </div>
-        """
+        rm_details_html += "</table>"
     
     # Complete HTML
     html = f"""
@@ -484,7 +391,7 @@ def create_email_html(df, checklist_status={}, upload_status={}):
     <head>
         <style>
             body {{ font-family: Arial, sans-serif; background: {IRONLADY_COLORS['accent']}; margin: 0; padding: 0; }}
-            .container {{ max-width: 900px; margin: 20px auto; background: white; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }}
+            .container {{ max-width: 1000px; margin: 20px auto; background: white; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }}
             .header {{ background: linear-gradient(135deg, {IRONLADY_COLORS['primary']} 0%, {IRONLADY_COLORS['secondary']} 100%); color: white; padding: 40px; text-align: center; }}
             .header h1 {{ margin: 0; font-size: 2.5rem; letter-spacing: 3px; font-weight: 900; }}
             .content {{ padding: 40px 30px; }}
@@ -501,25 +408,16 @@ def create_email_html(df, checklist_status={}, upload_status={}):
         <div class="container">
             <div class="header">
                 <h1>IRON LADY</h1>
-                <p>Daily Sales Performance Report</p>
+                <p>Daily Performance Report</p>
                 <p>{datetime.now().strftime('%B %d, %Y')}</p>
             </div>
             <div class="content">
                 <h2 class="section-title">📊 Executive Summary</h2>
                 <div class="metric">
                     <strong>Total RMs:</strong> {total_rms}<br/>
-                    <strong>Total Pitches:</strong> {total_pitches}<br/>
-                    <strong>Total Registrations:</strong> {total_registrations}<br/>
-                    <strong>Average Conversion:</strong> <span class="highlight">{avg_conversion}%</span>
-                </div>
-                
-                <h2 class="section-title">📋 Activity Summary</h2>
-                <div class="metric">
-                    <strong>WA Audit:</strong> {total_wa}<br/>
-                    <strong>Call Audit:</strong> {total_call}<br/>
-                    <strong>Mocks:</strong> {total_mocks}<br/>
-                    <strong>SL Calls:</strong> {total_sl}<br/>
-                    <strong>Current MC Registrations:</strong> {total_mc}
+                    <strong>Registration Target:</strong> {total_reg_target}<br/>
+                    <strong>Registrations Achieved:</strong> {total_reg_achieved}<br/>
+                    <strong>Achievement Rate:</strong> <span class="highlight">{avg_conversion}%</span>
                 </div>
                 
                 <h2 class="section-title">🏆 Team Leader Performance</h2>
@@ -527,20 +425,20 @@ def create_email_html(df, checklist_status={}, upload_status={}):
                     <tr>
                         <th>Team Leader</th>
                         <th style="text-align: center;">RMs</th>
-                        <th style="text-align: center;">Pitches</th>
-                        <th style="text-align: center;">Registrations</th>
-                        <th style="text-align: center;">Conversion %</th>
+                        <th style="text-align: center;">Reg Target</th>
+                        <th style="text-align: center;">Reg Achieved</th>
+                        <th style="text-align: center;">Achievement %</th>
                     </tr>
-                    {table_rows}
+                    {team_rows}
                 </table>
                 
-                {checklist_html}
-                
-                {upload_html}
+                <h2 class="section-title">📋 RM-Level Details</h2>
+                <p style="font-size: 0.9rem; color: #666;"><em>T/A = Target / Achieved</em></p>
+                {rm_details_html}
                 
                 <h2 class="section-title">💡 Key Insights</h2>
                 <div class="metric">
-                    {'✅ <strong>Excellent!</strong> Team meeting targets.' if avg_conversion >= 15 else '⚠️ <strong>Action needed:</strong> Below 15% target.'}
+                    {'✅ <strong>Excellent!</strong> Team meeting targets.' if avg_conversion >= 80 else '⚠️ <strong>Action needed:</strong> Below target achievement.'}
                 </div>
             </div>
             <div class="footer">
@@ -579,7 +477,7 @@ def send_email(recipients, subject, html_body):
 # ============================================
 
 def main():
-    print("🚀 Iron Lady Email Automation (FIXED VERSION)")
+    print("🚀 Iron Lady Email Automation - Multi-Sheet Version")
     print(f"📅 {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
     print("\n" + "="*60)
     print("CONFIGURATION CHECK")
@@ -593,7 +491,7 @@ def main():
     print(f"Sheet ID: {'✅' if SHEET_ID else '❌'}")
     print(f"Credentials: {'✅' if CREDENTIALS_JSON else '❌'}")
     
-    if not all([EMAIL_SENDER, EMAIL_PASSWORD, RECIPIENT_EMAILS, SHEET_ID, CREDENTIALS_JSON]):
+    if not all([SHEET_ID, CREDENTIALS_JSON]):
         print("\n❌ Missing required configuration!")
         sys.exit(1)
     
@@ -604,56 +502,41 @@ def main():
     today = datetime.now().strftime('%Y-%m-%d')
     print(f"Looking for data with date: {today}")
     
-    # Get performance data
-    df = get_metrics_data(today)
+    # Get all team data
+    team_data = get_all_team_data(today)
     
-    if len(df) == 0:
-        print(f"\n❌ No performance data for {today}")
-        print("\n💡 TROUBLESHOOTING:")
-        print("1. Check if DailyMetrics worksheet exists")
-        print("2. Check if data exists for today's date")
-        print("3. Verify column names: Username, Date, WA_Audit, Call_Audit, etc.")
-        print("4. Run diagnose_and_fix.py for detailed analysis")
+    if not team_data:
+        print(f"\n❌ No team data found!")
         sys.exit(1)
     
-    print(f"\n✅ Performance data loaded successfully!")
-    print(f"   Found {len(df)} team leaders")
-    for _, row in df.iterrows():
-        print(f"  → {row['Team_Leader']}: {row['Total_Pitches']} pitches, {row['Total_Registrations']} regs ({row['Conversion_Rate']}%)")
+    # Aggregate summary
+    team_summary = aggregate_team_summary(team_data)
     
-    # Get checklist data
     print("\n" + "="*60)
-    print("FETCHING CHECKLIST STATUS")
+    print("TEAM SUMMARY")
     print("="*60)
     
-    checklist_status = get_checklist_status(today)
-    if checklist_status:
-        print(f"✅ Checklist data: {len(checklist_status)} team leaders")
-        for username, status in checklist_status.items():
-            print(f"  → {username}: {status['completed']}/{status['total']} ({status['percentage']}%) - {status['day_type']}")
-    else:
-        print("ℹ️  No checklist data")
-    
-    # Get upload data
-    print("\n" + "="*60)
-    print("FETCHING UPLOAD STATUS")
-    print("="*60)
-    
-    upload_status = get_upload_status(today)
-    if upload_status:
-        print(f"✅ Upload data: {len(upload_status)} team leaders")
-        for username, status in upload_status.items():
-            print(f"  → {username}: {status['total_files']} files")
-    else:
-        print("ℹ️  No upload data")
+    for team_name, summary in team_summary.items():
+        print(f"\n{summary['display_name']}:")
+        print(f"  RMs: {summary['total_rms']}")
+        print(f"  Registrations: {summary['registrations_achieved']}/{summary['registrations_target']} ({summary['conversion_rate']}%)")
     
     # Create and send email
+    if not RECIPIENT_EMAILS:
+        print("\n⚠️  No recipients configured - generating email preview only")
+        html_body = create_email_html(team_summary, team_data)
+        
+        with open('email_preview.html', 'w') as f:
+            f.write(html_body)
+        print("✅ Email preview saved to email_preview.html")
+        return
+    
     print("\n" + "="*60)
     print("SENDING EMAIL")
     print("="*60)
     
     subject = f"Iron Lady Daily Report - {datetime.now().strftime('%B %d, %Y')}"
-    html_body = create_email_html(df, checklist_status, upload_status)
+    html_body = create_email_html(team_summary, team_data)
     
     success, message = send_email(RECIPIENT_EMAILS, subject, html_body)
     
